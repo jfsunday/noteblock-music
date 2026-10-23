@@ -15,7 +15,8 @@ def run(song, tpb=None, max_chord=None, transpose=0, override=None, skip=(), lay
     try:
         if not song.notes:
             raise ValueError("Keine Noten (alle Spuren abgewählt?)")
-        tpb = int(tpb or tempo_candidates(song)[0]["tpb"])
+        tpb = float(tpb or tempo_candidates(song)[0]["tpb"])
+        tpb = int(tpb) if tpb.is_integer() else tpb
         nbnotes, track_cfg, dropped = arrange(song, tpb, max_chord, transpose, override or {})
         nbnotes = [n for n in nbnotes if n.layer in set(layers)]
         if not nbnotes:

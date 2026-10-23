@@ -73,7 +73,7 @@ class Clock:
 
 @dataclass
 class Plan:
-    tpb: int
+    tpb: float
     bar_ticks: int
     lead_ticks: int
     patterns: dict
@@ -84,22 +84,37 @@ class Plan:
     offset: int = 0       # Song-Tick 0 = Dirigent-Tick `offset`
 
 
+def chunk_start(start, k, length):
+    """Start-Tick von Chunk k. Bei krummer Länge (Originaltempo exakt) gerundet."""
+    return start + round(k * length)
+
+
 def _chunkify(notes, start, length):
     chunks = defaultdict(list)
     for n in notes:
         k = math.floor((n.tick - start) / length)
-        chunks[k].append((n.tick - start - k * length, n.inst, n.clicks))
+        while chunk_start(start, k + 1, length) <= n.tick:
+            k += 1
+        while chunk_start(start, k, length) > n.tick:
+            k -= 1
+        chunks[k].append((n.tick - chunk_start(start, k, length), n.inst, n.clicks))
     return {k: tuple(sorted(v)) for k, v in chunks.items()}
 
 
-def _layer_options(notes, bar_ticks, tpb, end):
+def _layer_options(notes, bar_ticks, tpb, end, beats_per_bar=4):
     opts = []
-    for beats in (2, 3, 4, 6, 8, 10, 12, 16, 20, 24, 32):
-        length = beats * tpb
-        if length > end:
-            break
-        for start in range(0, min(length, bar_ticks), tpb):
-            opts.append((length, start, beats / (bar_ticks / tpb)))
+    if float(tpb).is_integer():
+        for beats in (2, 3, 4, 6, 8, 10, 12, 16, 20, 24, 32):
+            length = beats * tpb
+            if length > end:
+                break
+            for start in range(0, min(length, bar_ticks), tpb):
+                opts.append((length, start, beats / beats_per_bar))
+    else:   # krummes Tempo: nur ganze Takte, passend zur taktweisen Rundung in arrange()
+        for bars in (1, 2, 4, 8):
+            length = bars * beats_per_bar * tpb
+            if length <= end:
+                opts.append((length, 0, bars))
     best = None
     for length, start, bars in opts:
         chunks = _chunkify(notes, start, length)
@@ -114,7 +129,7 @@ def _layer_options(notes, bar_ticks, tpb, end):
                 j += 1
             run = j - i + 1
             types[key] = True
-            if run >= MIN_CLOCK_RUNS and length >= MIN_CLOCK_PERIOD:
+            if run >= MIN_CLOCK_RUNS and length >= MIN_CLOCK_PERIOD and float(length).is_integer():
                 events.append(("clock", k, run, key))
             else:
                 events.extend(("play", ks[x], key) for x in range(i, j + 1))
@@ -140,7 +155,7 @@ def _short(inst):
 def build_plan(nbnotes, tpb, beats_per_bar, allow_repeats=True):
     bar_ticks = max(1, round(beats_per_bar * tpb))
     first = min(n.tick for n in nbnotes)
-    lead = (first // bar_ticks) * bar_ticks
+    lead = (first // bar_ticks) * bar_ticks if float(tpb).is_integer() else 0
     from arrange import NBNote
     nbnotes = [NBNote(n.tick - lead, n.layer, n.inst, n.clicks, n.velocity, n.track) for n in nbnotes]
     end = max(n.tick for n in nbnotes)
@@ -155,14 +170,14 @@ def build_plan(nbnotes, tpb, beats_per_bar, allow_repeats=True):
             groups.append((layer, LAYER_TITLES[layer], notes, None))
             continue
         title = LAYER_TITLES[layer]
-        best = (_layer_options(notes, bar_ticks, tpb, end)[0],
-                [(title, notes, _layer_options(notes, bar_ticks, tpb, end))])
+        best = (_layer_options(notes, bar_ticks, tpb, end, beats_per_bar)[0],
+                [(title, notes, _layer_options(notes, bar_ticks, tpb, end, beats_per_bar))])
         for keyf, namef in ((lambda n: n.inst, lambda k: _short(k)),
                             (lambda n: (n.inst, n.clicks), lambda k: f"{_short(k[0])}{k[1]}")):
             keys = sorted({keyf(n) for n in notes})
             if len(keys) < 2:
                 continue
-            parts = [(f"{title}-{namef(k)}", ns, _layer_options(ns, bar_ticks, tpb, end))
+            parts = [(f"{title}-{namef(k)}", ns, _layer_options(ns, bar_ticks, tpb, end, beats_per_bar))
                      for k in keys for ns in [[n for n in notes if keyf(n) == k]]]
             cost = sum(o[0] for _, _, o in parts)
             if cost < best[0]:
@@ -183,15 +198,15 @@ def build_plan(nbnotes, tpb, beats_per_bar, allow_repeats=True):
                 letter = chr(ord("A") + len(names)) if len(names) < 26 else str(len(names))
                 pid = f"{title}-{letter}"
                 names[key] = pid
-                patterns[pid] = Pattern(pid, layer, length, list(key))
+                patterns[pid] = Pattern(pid, layer, math.ceil(length), list(key))
             pid = names[key]
-            t0 = start + ev[1] * length
+            t0 = chunk_start(start, ev[1], length)
             if ev[0] == "play":
                 plays.append((t0, pid))
                 patterns[pid].uses += 1
             else:
                 cid = f"Clock-{len(clocks) + 1}"
-                clocks.append(Clock(cid, pid, length, t0, ev[2]))
+                clocks.append(Clock(cid, pid, int(length), t0, ev[2]))
                 patterns[pid].uses += ev[2]
         layer_info[title] = {"layer": layer, "bars": bars, "chunk_ticks": length, "phase": start,
                              "patterns": len(names), "notes": len(notes)}
@@ -199,6 +214,7 @@ def build_plan(nbnotes, tpb, beats_per_bar, allow_repeats=True):
         p.build_steps()
 
     plan = Plan(tpb, bar_ticks, lead, patterns, sorted(plays), clocks, layer_info=layer_info)
+    plan.beats_per_bar = beats_per_bar
     _build_conductor(plan)
     return plan, nbnotes
 

@@ -181,7 +181,9 @@ function buildSettings() {
     const o = document.createElement("option");
     o.value = t.tpb;
     const dev = Math.round((t.bpm / c.bpm - 1) * 100);
-    o.textContent = `${t.bpm.toFixed(1)} BPM · ${t.tpb} Ticks/Schlag · ${dev >= 0 ? "+" : ""}${dev} % · Raster-Fehler ${t.grid_err.toFixed(3)}${t.tpb === c.recommended ? "  ★ Empfehlung" : ""}`;
+    o.textContent = t.exact
+      ? `${t.bpm.toFixed(1)} BPM · Originaltempo exakt (~${t.tpb.toFixed(2)} Ticks/Schlag, Noten einzeln gerundet) · Raster-Fehler ${t.grid_err.toFixed(3)}${t.tpb === c.recommended ? "  ★ Empfehlung" : ""}`
+      : `${t.bpm.toFixed(1)} BPM · ${t.tpb} Ticks/Schlag · ${dev >= 0 ? "+" : ""}${dev} % · Raster-Fehler ${t.grid_err.toFixed(3)}${t.tpb === c.recommended ? "  ★ Empfehlung" : ""}`;
     if (t.tpb === c.recommended) o.selected = true;
     sel.append(o);
   }
@@ -218,7 +220,7 @@ function options() {
   document.querySelectorAll("#tracks input[data-use]").forEach((c) => { if (!c.checked) skip.push(c.dataset.use); });
   const layers = [...document.querySelectorAll("input[name=layer]:checked")].map((c) => c.value);
   return {
-    tpb: parseInt($("#tpb").value),
+    tpb: parseFloat($("#tpb").value),
     transpose: parseInt($("#transpose").value) || 0,
     max_chord: { beat: +$("#mc-beat").value, bass: +$("#mc-bass").value, melodie: +$("#mc-melodie").value },
     repeats: $("#repeats").checked, layers, override, skip,

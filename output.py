@@ -27,10 +27,17 @@ def fmt_nb(inst, clicks):
 
 
 def bar_pos(tick, plan):
-    bar, rest = divmod(tick, plan.bar_ticks)
-    beat, sub = divmod(rest, plan.tpb)
-    s = f"T{bar + 1}.{beat + 1}"
-    return s + (f"+{sub}" if sub else "")
+    bpb = getattr(plan, "beats_per_bar", plan.bar_ticks / plan.tpb)
+    b = tick / plan.tpb + 1e-9
+    bar = int(b // bpb)
+    inbar = b - bar * bpb
+    beat = int(inbar)
+    sub = round((inbar - beat) * plan.tpb)
+    return f"T{bar + 1}.{beat + 1}" + (f"+{sub}" if sub else "")
+
+
+def fmt_tpb(tpb):
+    return f"{tpb:g}" if float(tpb).is_integer() else f"~{tpb:.2f}"
 
 
 def stats(plan):
@@ -56,8 +63,10 @@ def to_markdown(song, plan, cfg, info):
     L = []
     L.append(f"# Notenblock-Bauplan: {song.title}\n")
     L.append(f"- Quelle: {song.source.upper()}, Originaltempo **{song.bpm:.0f} BPM**")
-    L.append(f"- Minecraft-Tempo: **{bpm:.1f} BPM** = {plan.tpb} Redstone-Ticks pro Schlag "
-             f"({plan.bar_ticks} Ticks pro Takt), Tempo-Faktor {bpm / song.bpm:.2f}")
+    L.append(f"- Minecraft-Tempo: **{bpm:.1f} BPM** = {fmt_tpb(plan.tpb)} Redstone-Ticks pro Schlag "
+             f"({plan.bar_ticks} Ticks pro Takt), Tempo-Faktor {bpm / song.bpm:.2f}"
+             + ("" if float(plan.tpb).is_integer() else
+                " – *Originaltempo exakt: Noten einzeln auf Ticks gerundet, Abstände leicht ungleichmäßig*"))
     L.append(f"- Länge: {info['length_s']:.0f} s · **{nb} Notenblöcke**, ca. **{reps} Repeater**, "
              f"{len(plan.patterns)} Pattern, {len(plan.clocks)} Clocks")
     if info["dropped"]:

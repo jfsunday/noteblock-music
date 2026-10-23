@@ -22,7 +22,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("input", help="MIDI (.mid) oder Audio (.mp3/.wav/.ogg/.flac …)")
     ap.add_argument("-o", "--out", help="Ausgabe-Präfix (Standard: neben der Eingabedatei)")
-    ap.add_argument("--tpb", type=int, help="Redstone-Ticks pro Schlag (Tempo = 600/tpb BPM)")
+    ap.add_argument("--tpb", type=float, help="Redstone-Ticks pro Schlag (Tempo = 600/tpb BPM)")
     ap.add_argument("--tempos", action="store_true", help="nur Tempo-Optionen anzeigen")
     ap.add_argument("--max-chord", action="append", default=[], metavar="LAYER=N",
                     help=f"max. gleichzeitige Notenblöcke pro Layer (Standard {DEFAULT_MAX_CHORD})")
@@ -51,7 +51,7 @@ def main():
         print("\nTicks/Schlag  BPM     Tempo-Abw.  Raster-Fehler (Schläge)")
         for c in sorted(cands, key=lambda c: c["tpb"]):
             mark = "  <- Empfehlung" if c is cands[0] else ""
-            print(f"  {c['tpb']:>3}       {c['bpm']:6.1f}  {c['tempo_dev'] * 100:6.1f} %   {c['grid_err']:.3f}{mark}")
+            print(f"  {c['tpb']:>6g}    {c['bpm']:6.1f}  {c['tempo_dev'] * 100:6.1f} %   {c['grid_err']:.3f}{mark}{'  (Originaltempo exakt)' if c.get('exact') else ''}")
         return
     max_chord = {k: int(v) for k, v in (x.split("=") for x in a.max_chord)}
     override = dict(x.split("=", 1) for x in a.instrument)
@@ -65,7 +65,7 @@ def main():
     md = base.with_name(base.name + "_bauplan.md")
     md.write_text(r["markdown"], encoding="utf-8")
     base.with_name(base.name + "_bauplan.json").write_text(r["json"], encoding="utf-8")
-    print(f"Tempo: {600 / tpb:.1f} BPM ({tpb} Ticks/Schlag), {len(placed)} Noten → {stats(plan)[0]} Notenblöcke zu bauen, "
+    print(f"Tempo: {600 / tpb:.1f} BPM ({tpb:g} Ticks/Schlag), {len(placed)} Noten → {stats(plan)[0]} Notenblöcke zu bauen, "
           f"{len(plan.patterns)} Pattern, {len(plan.clocks)} Clocks, {len(plan.taps)} Dirigent-Abgriffe")
     for layer, li in plan.layer_info.items():
         unit = f"{li['bars']:g} Takt(e)" if li['bars'] else "ganzer Song"

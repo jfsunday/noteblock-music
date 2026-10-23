@@ -35,6 +35,12 @@ def tempo_candidates(song, tpb_range=range(2, 17)):
         tempo_dev = abs(math.log(bpm / song.bpm))
         res.append({"tpb": tpb, "bpm": bpm, "grid_err": err, "tempo_dev": tempo_dev,
                     "score": err * 6 + tempo_dev})
+    # Originaltempo exakt: krumme Ticks pro Schlag, jede Note einzeln gerundet
+    exact = 600 / song.bpm
+    if all(abs(exact - r["tpb"]) > 0.02 for r in res):
+        err = sum(abs(b * exact - round(b * exact)) for b in beats) / max(1, len(beats)) / exact
+        res.append({"tpb": round(exact, 4), "bpm": song.bpm, "grid_err": err, "tempo_dev": 0.0,
+                    "score": err * 6 + 0.05, "exact": True})
     return sorted(res, key=lambda r: r["score"])
 
 
@@ -85,7 +91,13 @@ def arrange(song, tpb, max_chord=None, transpose=0, instrument_override=None):
 
     raw = []
     for n in song.notes:
-        tick = round(n.beat * tpb)
+        if float(tpb).is_integer():
+            tick = round(n.beat * tpb)
+        else:   # krummes Tempo: pro Takt runden, damit gleiche Takte gleich bleiben
+            bpb = song.beats_per_bar
+            beat = round(n.beat * 12) / 12          # Humanisierung raus (16tel + Triolen)
+            bar = math.floor(beat / bpb + 1e-9)
+            tick = round(bar * bpb * tpb) + round((beat - bar * bpb) * tpb)
         if n.drum:
             inst, clicks = drum_for_gm(n.pitch)
             raw.append(NBNote(tick, "beat", inst, clicks, n.velocity, n.track))
