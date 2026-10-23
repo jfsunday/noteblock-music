@@ -8,7 +8,7 @@ from planner import build_plan, simulate
 
 
 def run(song, tpb=None, max_chord=None, transpose=0, override=None, skip=(), layers=LAYERS,
-        repeats=True):
+        repeats=True, doubles=None, simple_drums=False):
     max_chord = {k: int(v) for k, v in (max_chord or {}).items()}
     notes_backup = song.notes
     song.notes = [n for n in song.notes if n.track not in set(skip)]
@@ -17,7 +17,8 @@ def run(song, tpb=None, max_chord=None, transpose=0, override=None, skip=(), lay
             raise ValueError("Keine Noten (alle Spuren abgewählt?)")
         tpb = float(tpb or tempo_candidates(song)[0]["tpb"])
         tpb = int(tpb) if tpb.is_integer() else tpb
-        nbnotes, track_cfg, dropped = arrange(song, tpb, max_chord, transpose, override or {})
+        nbnotes, track_cfg, dropped = arrange(song, tpb, max_chord, transpose, override or {},
+                                             doubles, simple_drums)
         nbnotes = [n for n in nbnotes if n.layer in set(layers)]
         if not nbnotes:
             raise ValueError("Keine Noten in den gewählten Layern")
@@ -80,7 +81,8 @@ def web_generate(opts_json):
     o = json.loads(opts_json)
     r = run(_SONG, tpb=o.get("tpb"), max_chord=o.get("max_chord"), transpose=o.get("transpose", 0),
             override=o.get("override"), skip=o.get("skip", []), layers=o.get("layers", LAYERS),
-            repeats=o.get("repeats", True))
+            repeats=o.get("repeats", True), doubles=o.get("doubles"),
+            simple_drums=o.get("simple_drums", False))
     nb, reps, blocks = stats(r["plan"])
     return json.dumps({
         "markdown": r["markdown"], "json": r["json"], "info": r["info"], "tpb": r["tpb"],

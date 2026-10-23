@@ -1,7 +1,8 @@
 """Quantisieren auf Redstone-Ticks, Instrumente zuordnen, Tonumfang anpassen."""
 import math
+import re
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from instruments import INSTRUMENTS, drum_for_gm, instrument_for_program
 
@@ -64,19 +65,40 @@ def _fold(pitch, inst_key):
     return pitch - inst.low
 
 
-def arrange(song, tpb, max_chord=None, transpose=0, instrument_override=None):
+SIMPLE_DRUMS = {35, 36, 38, 40, 39}   # Kick, Snare, Clap
+
+
+def _parse_spec(spec):
+    """'harp' oder 'harp+1' / 'bell-1' -> (instrument, erzwungene Oktave oder None)"""
+    m = re.fullmatch(r"([a-z_]+)\s*([+-]\d+)?", spec.strip())
+    if not m or m.group(1) not in INSTRUMENTS:
+        raise ValueError(f"Unbekanntes Instrument: {spec!r} (erlaubt: {', '.join(INSTRUMENTS)}, optional +N/-N Oktaven)")
+    return m.group(1), int(m.group(2)) if m.group(2) else None
+
+
+def arrange(song, tpb, max_chord=None, transpose=0, instrument_override=None, doubles=None,
+            simple_drums=False):
+    """doubles: {Spur: 'bell+2'} -> Spur zusätzlich mit 2. Instrument (lauter/präsenter).
+    simple_drums: nur Kick, Snare, Clap (Melodie bleibt hörbar)."""
     max_chord = {**DEFAULT_MAX_CHORD, **(max_chord or {})}
-    instrument_override = instrument_override or {}
+    instrument_override = dict(instrument_override or {})
+    notes_in = [n for n in song.notes if not (simple_drums and n.drum and n.pitch not in SIMPLE_DRUMS)]
+    for track, spec in (doubles or {}).items():
+        name = f"{track} (+{spec})"
+        instrument_override[name] = spec
+        notes_in += [replace(n, track=name) for n in song.notes if n.track == track]
 
     # Instrument + Oktavlage pro Spur bestimmen
     groups = defaultdict(list)
-    for n in song.notes:
+    for n in notes_in:
         if not n.drum:
             groups[(n.track, n.program)].append(n.pitch + transpose)
     track_cfg = {}
     for (track, program), pitches in groups.items():
+        forced = None
         if track in instrument_override:
-            cands = [instrument_override[track]]
+            inst, forced = _parse_spec(instrument_override[track])
+            cands = [inst]
         else:
             base = instrument_for_program(program)
             cands = [base]
@@ -87,24 +109,27 @@ def arrange(song, tpb, max_chord=None, transpose=0, instrument_override=None):
                 cands.append("bell")
         scored = [(_fit(pitches, c), c) for c in cands]
         (score, shift), inst = max(scored, key=lambda s: s[0][0])
+        if forced is not None:
+            shift = forced
         track_cfg[(track, program)] = (inst, shift)
 
     raw = []
-    for n in song.notes:
+    for n in notes_in:
+        beat = round(n.beat * 12) / 12              # Humanisierung raus (16tel + Triolen)
         if float(tpb).is_integer():
-            tick = round(n.beat * tpb)
+            tick = math.floor(beat * tpb + 0.5)
         else:   # krummes Tempo: pro Takt runden, damit gleiche Takte gleich bleiben
             bpb = song.beats_per_bar
-            beat = round(n.beat * 12) / 12          # Humanisierung raus (16tel + Triolen)
             bar = math.floor(beat / bpb + 1e-9)
-            tick = round(bar * bpb * tpb) + round((beat - bar * bpb) * tpb)
+            tick = math.floor(bar * bpb * tpb + 0.5) + math.floor((beat - bar * bpb) * tpb + 0.5)
         if n.drum:
             inst, clicks = drum_for_gm(n.pitch)
             raw.append(NBNote(tick, "beat", inst, clicks, n.velocity, n.track))
             continue
         inst, shift = track_cfg[(n.track, n.program)]
-        if INSTRUMENTS[inst].percussion:
-            raw.append(NBNote(tick, "beat", inst, 0, n.velocity, n.track))
+        if INSTRUMENTS[inst].percussion:   # z.B. Tom-Fills: Tonhöhe übernehmen
+            clicks = _fold(n.pitch + transpose + 12 * shift, inst)
+            raw.append(NBNote(tick, "beat", inst, clicks, n.velocity, n.track))
             continue
         clicks = _fold(n.pitch + transpose + 12 * shift, inst)
         layer = "bass" if inst in ("bass", "didgeridoo") else "melodie"
@@ -114,11 +139,12 @@ def arrange(song, tpb, max_chord=None, transpose=0, instrument_override=None):
     by_slot = defaultdict(dict)
     for n in raw:
         key = (n.inst, n.clicks)
-        slot = by_slot[(n.layer, n.tick)]
+        # Melodie: Limit pro Instrument (jedes Instrument bekommt eh eine eigene Leitung)
+        slot = by_slot[(n.layer, n.tick, n.inst if n.layer == "melodie" else "")]
         if key not in slot or slot[key].velocity < n.velocity:
             slot[key] = n
     out, dropped = [], 0
-    for (layer, tick), slot in by_slot.items():
+    for (layer, tick, _), slot in by_slot.items():
         notes = list(slot.values())
         if layer == "melodie":
             top = max(notes, key=lambda x: x.pitch)

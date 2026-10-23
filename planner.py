@@ -101,6 +101,13 @@ def _chunkify(notes, start, length):
     return {k: tuple(sorted(v)) for k, v in chunks.items()}
 
 
+def _line_cost(key):
+    """Notenblöcke + Repeater einer Pattern-Leitung (inkl. leerer Strecken)."""
+    offs = sorted({o for o, _, _ in key})
+    reps = sum(len(split_delay(b - a)) for a, b in zip([0] + offs, offs))
+    return len(key) + reps
+
+
 def _layer_options(notes, bar_ticks, tpb, end, beats_per_bar=4):
     opts = []
     if float(tpb).is_integer():
@@ -134,7 +141,7 @@ def _layer_options(notes, bar_ticks, tpb, end, beats_per_bar=4):
             else:
                 events.extend(("play", ks[x], key) for x in range(i, j + 1))
             i = j + 1
-        cost = sum(len(key) + len({o for o, _, _ in key}) for key in types)
+        cost = sum(_line_cost(key) for key in types)
         cost += 8 * len(types)
         cost += sum(3 if e[0] == "play" else 14 for e in events)
         cand = (cost, length, start, bars, events, types)
@@ -142,7 +149,7 @@ def _layer_options(notes, bar_ticks, tpb, end, beats_per_bar=4):
             best = cand
     # Alternative: ganzer Layer als eine einzige Leitung
     whole_key = tuple(sorted((n.tick, n.inst, n.clicks) for n in notes))
-    whole_cost = len(whole_key) + len({n.tick for n in notes}) + 8 + 3
+    whole_cost = _line_cost(whole_key) + 8 + 3
     if best is None or whole_cost <= best[0]:
         return (whole_cost, end + 1, 0, None, [("play", 0, whole_key)], {whole_key: True})
     return best

@@ -201,11 +201,13 @@ function buildSettings() {
     const instCell = t.drum ? `<span class="muted">Schlagzeug (automatisch)</span>` :
       `<select data-track="${escapeAttr(t.name)}">${c.instruments.map((i) =>
         `<option value="${i.key}" ${i.key === t.inst ? "selected" : ""}>${i.name} — ${i.block.split(" (")[0]}</option>`).join("")}</select>`;
+    const dblCell = t.drum ? "" :
+      `<select data-double="${escapeAttr(t.name)}"><option value="">–</option>${melodicInst.map((i) =>
+        `<option value="${i.key}">${i.name}</option>`).join("")}</select>`;
     tr.innerHTML = `<td><input type="checkbox" checked data-use="${escapeAttr(t.name)}"></td>
-      <td>${escapeHtml(t.name)}</td><td class="num">${t.notes}</td><td>${instCell}</td>`;
+      <td>${escapeHtml(t.name)}</td><td class="num">${t.notes}</td><td>${instCell}</td><td>${dblCell}</td>`;
     tb.append(tr);
   }
-  void melodicInst;
 }
 
 const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -218,12 +220,15 @@ function options() {
     if (s.value !== t.inst) override[s.dataset.track] = s.value;
   });
   document.querySelectorAll("#tracks input[data-use]").forEach((c) => { if (!c.checked) skip.push(c.dataset.use); });
+  const doubles = {};
+  document.querySelectorAll("#tracks select[data-double]").forEach((s) => { if (s.value) doubles[s.dataset.double] = s.value; });
   const layers = [...document.querySelectorAll("input[name=layer]:checked")].map((c) => c.value);
   return {
     tpb: parseFloat($("#tpb").value),
     transpose: parseInt($("#transpose").value) || 0,
     max_chord: { beat: +$("#mc-beat").value, bass: +$("#mc-bass").value, melodie: +$("#mc-melodie").value },
-    repeats: $("#repeats").checked, layers, override, skip,
+    repeats: $("#repeats").checked, layers, override, skip, doubles,
+    simple_drums: $("#simple-drums").checked,
   };
 }
 
@@ -244,6 +249,7 @@ $("#settings").addEventListener("change", async (e) => {
 function restore(o) {
   document.querySelectorAll("#tracks input[data-use]").forEach((c) => { c.checked = !o.skip.includes(c.dataset.use); });
   document.querySelectorAll("#tracks select[data-track]").forEach((s) => { if (o.override[s.dataset.track]) s.value = o.override[s.dataset.track]; });
+  document.querySelectorAll("#tracks select[data-double]").forEach((s) => { if (o.doubles[s.dataset.double]) s.value = o.doubles[s.dataset.double]; });
 }
 
 async function generate() {

@@ -28,7 +28,11 @@ def main():
                     help=f"max. gleichzeitige Notenblöcke pro Layer (Standard {DEFAULT_MAX_CHORD})")
     ap.add_argument("--transpose", type=int, default=0, help="Halbtöne transponieren")
     ap.add_argument("--instrument", action="append", default=[], metavar="SPUR=INSTRUMENT",
-                    help=f"Instrument einer Spur erzwingen ({', '.join(INSTRUMENTS)})")
+                    help=f"Instrument einer Spur erzwingen, optional mit Oktave, z.B. MELODY=harp+1 ({', '.join(INSTRUMENTS)})")
+    ap.add_argument("--double", action="append", default=[], metavar="SPUR=INSTRUMENT",
+                    help="Spur zusätzlich mit 2. Instrument spielen (lauter), z.B. MELODY=bell+2")
+    ap.add_argument("--simple-drums", action="store_true", help="nur Kick/Snare/Clap")
+    ap.add_argument("--sounds", help="Minecraft-assets-Ordner für echte Sounds (Standard: automatisch suchen)")
     ap.add_argument("--skip", action="append", default=[], metavar="SPUR", help="Spur weglassen")
     ap.add_argument("--layers", default=",".join(LAYERS), help="welche Layer bauen (beat,bass,melodie)")
     ap.add_argument("--no-repeats", action="store_true", help="keine Pattern/Clocks, alles als eine Leitung")
@@ -56,7 +60,8 @@ def main():
     max_chord = {k: int(v) for k, v in (x.split("=") for x in a.max_chord)}
     override = dict(x.split("=", 1) for x in a.instrument)
     r = run(song, tpb=a.tpb, max_chord=max_chord, transpose=a.transpose, override=override,
-            layers=a.layers.split(","), repeats=not a.no_repeats)
+            layers=a.layers.split(","), repeats=not a.no_repeats,
+            doubles=dict(x.split("=", 1) for x in a.double), simple_drums=a.simple_drums)
     plan, placed, played, tpb = r["plan"], r["placed"], r["played"], r["tpb"]
     if not r["info"]["selftest_ok"]:
         print("WARNUNG: Simulation der Schaltung weicht von den Noten ab!")
@@ -74,8 +79,8 @@ def main():
     if not a.no_preview:
         from preview import render
         wav = base.with_name(base.name + "_vorschau.wav")
-        render(played, wav)
-        print(f"→ {wav} (Hörprobe, so ungefähr klingt's in Minecraft)")
+        real = render(played, wav, assets=a.sounds)
+        print(f"→ {wav} (Hörprobe, {'echte Minecraft-Sounds' if real else 'Synth-Ersatzsounds'})")
     if a.save_midi and song.source == "audio":
         save_midi(song, base.with_name(base.name + "_erkannt.mid"))
 
