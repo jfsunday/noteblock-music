@@ -137,8 +137,8 @@ def arrange(song, tpb, max_chord=None, transpose=0, instrument_override=None, do
         layer = "bass" if inst in ("bass", "didgeridoo") else "melodie"
         raw.append(NBNote(tick, layer, inst, clicks, n.velocity, n.track))
         every = sustain.get(n.track)
-        if every and every > 0:
-            end = math.floor((beat + n.duration) * tpb + 0.5)
+        end = math.floor((beat + n.duration) * tpb + 0.5)
+        if every and every > 0 and end - tick >= max(3, 2 * every):   # nur wirklich lange Töne
             for t in range(tick + every, end, every):
                 raw.append(NBNote(t, layer, inst, clicks, n.velocity - 1, n.track))
 

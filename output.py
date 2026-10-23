@@ -72,6 +72,8 @@ def to_markdown(song, plan, cfg, info):
     if info["dropped"]:
         L.append(f"- {info['dropped']} Noten weggelassen (zu viele gleichzeitig, max. Akkord "
                  f"{info['max_chord']})")
+    if info.get("roles"):
+        L.append("- Auto-Arrangement: " + "; ".join(f"{t}: *{r}*" for t, r in sorted(info["roles"].items())))
     if info.get("folded"):
         L.append(f"- Spuren → Instrument: " + "; ".join(info["folded"]))
     L.append("\n**Material:** " + ", ".join(f"{v}× {k}" for k, v in blocks.most_common())

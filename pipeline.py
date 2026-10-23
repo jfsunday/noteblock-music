@@ -3,6 +3,7 @@ import json
 import math
 from dataclasses import replace
 
+from auto import auto_config
 from arrange import DEFAULT_MAX_CHORD, LAYERS, arrange, tempo_candidates
 from instruments import INSTRUMENTS
 from output import stats, to_json, to_markdown
@@ -10,7 +11,21 @@ from planner import build_plan, simulate
 
 
 def run(song, tpb=None, max_chord=None, transpose=0, override=None, skip=(), layers=LAYERS,
-        repeats=True, doubles=None, simple_drums=False, sustain=None, start_s=None, end_s=None):
+        repeats=True, doubles=None, simple_drums=False, sustain=None, start_s=None, end_s=None,
+        auto=True, keep=()):
+    """auto=True: Auto-Arrangeur (auto.py) schlägt Spuren/Instrumente/Tremolo vor,
+    explizite Angaben überschreiben ihn. keep: Spuren trotz Auto-Auswahl behalten."""
+    roles = {}
+    if auto:
+        cfg = auto_config(song)
+        roles = cfg["roles"]
+        skip = (set(cfg["skip"]) - set(keep)) | set(skip)
+        override = {**cfg["override"], **(override or {})}
+        doubles = {**cfg["doubles"], **(doubles or {})}
+        sustain = {**cfg["sustain"], **(sustain or {})}
+        simple_drums = simple_drums or cfg["simple_drums"]
+        if not max_chord:
+            max_chord = {"melodie": 3}
     max_chord = {k: int(v) for k, v in (max_chord or {}).items()}
     notes_backup = song.notes
     song.notes = [n for n in song.notes if n.track not in set(skip)]
@@ -38,7 +53,7 @@ def run(song, tpb=None, max_chord=None, transpose=0, override=None, skip=(), lay
               for (t, _), (i, s) in sorted(track_cfg.items())]
     info = {"dropped": dropped, "max_chord": {**DEFAULT_MAX_CHORD, **max_chord},
             "length_s": (max(n.tick for n in placed) + 1) / 10, "folded": folded,
-            "layers": plan.layer_info, "selftest_ok": ok}
+            "layers": plan.layer_info, "selftest_ok": ok, "roles": roles}
     return {"song": song, "plan": plan, "placed": placed, "played": played, "info": info,
             "track_cfg": track_cfg, "tpb": tpb,
             "markdown": to_markdown(song, plan, None, info),

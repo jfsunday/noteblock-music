@@ -35,6 +35,8 @@ def main():
                     help="lange Töne alle N Ticks neu anschlagen (Tremolo statt kurzem Pling), z.B. STRINGS=2")
     ap.add_argument("--from", dest="start_s", type=float, help="Ausschnitt ab Sekunde (Original)")
     ap.add_argument("--to", dest="end_s", type=float, help="Ausschnitt bis Sekunde (Original)")
+    ap.add_argument("--manual", action="store_true", help="Auto-Arrangeur aus (alle Spuren, nichts automatisch)")
+    ap.add_argument("--keep", action="append", default=[], metavar="SPUR", help="Spur trotz Auto-Auswahl behalten")
     ap.add_argument("--simple-drums", action="store_true", help="nur Kick/Snare/Clap")
     ap.add_argument("--sounds", help="Minecraft-assets-Ordner für echte Sounds (Standard: automatisch suchen)")
     ap.add_argument("--skip", action="append", default=[], metavar="SPUR", help="Spur weglassen")
@@ -66,8 +68,11 @@ def main():
     r = run(song, tpb=a.tpb, max_chord=max_chord, transpose=a.transpose, override=override,
             layers=a.layers.split(","), repeats=not a.no_repeats,
             doubles=dict(x.split("=", 1) for x in a.double), simple_drums=a.simple_drums,
-            sustain=dict(x.split("=", 1) for x in a.sustain), start_s=a.start_s, end_s=a.end_s)
+            sustain=dict(x.split("=", 1) for x in a.sustain), start_s=a.start_s, end_s=a.end_s,
+            auto=not a.manual, keep=a.keep)
     plan, placed, played, tpb = r["plan"], r["placed"], r["played"], r["tpb"]
+    if r["info"]["roles"]:
+        print("Auto-Arrangement: " + ", ".join(f"{t} = {role}" for t, role in sorted(r["info"]["roles"].items())))
     if not r["info"]["selftest_ok"]:
         print("WARNUNG: Simulation der Schaltung weicht von den Noten ab!")
 
