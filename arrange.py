@@ -25,17 +25,36 @@ class NBNote:
         return INSTRUMENTS[self.inst].low + self.clicks
 
 
+def detect_grid(song):
+    """Feinstes Raster, das der Song wirklich nutzt (Teiler pro Schlag): 4 = 16tel, 3 = Triolen …
+    Nimmt das gröbste Raster, auf dem die Noten (bis auf Humanisierung) liegen."""
+    beats = [n.beat for n in song.notes]
+    if not beats:
+        return 4
+    for div in (2, 4, 3, 6, 8, 12, 16, 24):
+        err = sum(abs(b * div - round(b * div)) / div for b in beats) / len(beats)
+        if err < 0.02:
+            return div
+    return 12
+
+
+def snap(beat, div):
+    return round(beat * div) / div
+
+
 def tempo_candidates(song, tpb_range=range(2, 17)):
     """Bewertet mögliche Ticks-pro-Schlag. Ein Redstone-Tick = 0,1 s,
-    also Tempo = 600 / tpb BPM. Fehler = mittlere Abweichung vom Raster (in Schlägen)."""
-    beats = [n.beat for n in song.notes]
+    also Tempo = 600 / tpb BPM. Fehler = mittlere Abweichung vom Raster (in Schlägen).
+    Tempotreue zählt doppelt: Ziel ist, die Vorlage möglichst genau nachzubauen."""
+    div = detect_grid(song)
+    beats = [snap(n.beat, div) for n in song.notes]
     res = []
     for tpb in tpb_range:
         err = sum(abs(b * tpb - round(b * tpb)) for b in beats) / max(1, len(beats)) / tpb
         bpm = 600 / tpb
         tempo_dev = abs(math.log(bpm / song.bpm))
         res.append({"tpb": tpb, "bpm": bpm, "grid_err": err, "tempo_dev": tempo_dev,
-                    "score": err * 6 + tempo_dev})
+                    "score": err * 6 + 2 * tempo_dev})
     # Originaltempo exakt: krumme Ticks pro Schlag, jede Note einzeln gerundet
     exact = 600 / song.bpm
     if all(abs(exact - r["tpb"]) > 0.02 for r in res):
@@ -116,9 +135,10 @@ def arrange(song, tpb, max_chord=None, transpose=0, instrument_override=None, do
             shift = forced
         track_cfg[(track, program)] = (inst, shift)
 
+    grid = detect_grid(song)
     raw = []
     for n in notes_in:
-        beat = round(n.beat * 12) / 12              # Humanisierung raus (16tel + Triolen)
+        beat = snap(n.beat, grid)                  # Humanisierung raus (auf das erkannte Raster)
         if float(tpb).is_integer():
             tick = math.floor(beat * tpb + 0.5)
         else:   # krummes Tempo: global runden -> max. 0,5 Tick Abweichung (Rhythmus vor Wiederverwendung)
