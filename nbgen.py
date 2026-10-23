@@ -31,6 +31,10 @@ def main():
                     help=f"Instrument einer Spur erzwingen, optional mit Oktave, z.B. MELODY=harp+1 ({', '.join(INSTRUMENTS)})")
     ap.add_argument("--double", action="append", default=[], metavar="SPUR=INSTRUMENT",
                     help="Spur zusätzlich mit 2. Instrument spielen (lauter), z.B. MELODY=bell+2")
+    ap.add_argument("--sustain", action="append", default=[], metavar="SPUR=TICKS",
+                    help="lange Töne alle N Ticks neu anschlagen (Tremolo statt kurzem Pling), z.B. STRINGS=2")
+    ap.add_argument("--from", dest="start_s", type=float, help="Ausschnitt ab Sekunde (Original)")
+    ap.add_argument("--to", dest="end_s", type=float, help="Ausschnitt bis Sekunde (Original)")
     ap.add_argument("--simple-drums", action="store_true", help="nur Kick/Snare/Clap")
     ap.add_argument("--sounds", help="Minecraft-assets-Ordner für echte Sounds (Standard: automatisch suchen)")
     ap.add_argument("--skip", action="append", default=[], metavar="SPUR", help="Spur weglassen")
@@ -61,7 +65,8 @@ def main():
     override = dict(x.split("=", 1) for x in a.instrument)
     r = run(song, tpb=a.tpb, max_chord=max_chord, transpose=a.transpose, override=override,
             layers=a.layers.split(","), repeats=not a.no_repeats,
-            doubles=dict(x.split("=", 1) for x in a.double), simple_drums=a.simple_drums)
+            doubles=dict(x.split("=", 1) for x in a.double), simple_drums=a.simple_drums,
+            sustain=dict(x.split("=", 1) for x in a.sustain), start_s=a.start_s, end_s=a.end_s)
     plan, placed, played, tpb = r["plan"], r["placed"], r["played"], r["tpb"]
     if not r["info"]["selftest_ok"]:
         print("WARNUNG: Simulation der Schaltung weicht von den Noten ab!")

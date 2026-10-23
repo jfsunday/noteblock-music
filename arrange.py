@@ -77,9 +77,11 @@ def _parse_spec(spec):
 
 
 def arrange(song, tpb, max_chord=None, transpose=0, instrument_override=None, doubles=None,
-            simple_drums=False):
+            simple_drums=False, sustain=None):
     """doubles: {Spur: 'bell+2'} -> Spur zusätzlich mit 2. Instrument (lauter/präsenter).
-    simple_drums: nur Kick, Snare, Clap (Melodie bleibt hörbar)."""
+    simple_drums: nur Kick, Snare, Clap (Melodie bleibt hörbar).
+    sustain: {Spur: N} -> lange Töne alle N Ticks neu anschlagen (Notenblöcke klingen nicht nach)."""
+    sustain = {k: int(v) for k, v in (sustain or {}).items()}
     max_chord = {**DEFAULT_MAX_CHORD, **(max_chord or {})}
     instrument_override = dict(instrument_override or {})
     notes_in = [n for n in song.notes if not (simple_drums and n.drum and n.pitch not in SIMPLE_DRUMS)]
@@ -134,6 +136,11 @@ def arrange(song, tpb, max_chord=None, transpose=0, instrument_override=None, do
         clicks = _fold(n.pitch + transpose + 12 * shift, inst)
         layer = "bass" if inst in ("bass", "didgeridoo") else "melodie"
         raw.append(NBNote(tick, layer, inst, clicks, n.velocity, n.track))
+        every = sustain.get(n.track)
+        if every and every > 0:
+            end = math.floor((beat + n.duration) * tpb + 0.5)
+            for t in range(tick + every, end, every):
+                raw.append(NBNote(t, layer, inst, clicks, n.velocity - 1, n.track))
 
     # Doppelte entfernen + Akkordgröße begrenzen
     by_slot = defaultdict(dict)

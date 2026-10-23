@@ -1,5 +1,7 @@
 """Gemeinsame Pipeline für CLI und Web-UI (Pyodide)."""
 import json
+import math
+from dataclasses import replace
 
 from arrange import DEFAULT_MAX_CHORD, LAYERS, arrange, tempo_candidates
 from instruments import INSTRUMENTS
@@ -8,17 +10,22 @@ from planner import build_plan, simulate
 
 
 def run(song, tpb=None, max_chord=None, transpose=0, override=None, skip=(), layers=LAYERS,
-        repeats=True, doubles=None, simple_drums=False):
+        repeats=True, doubles=None, simple_drums=False, sustain=None, start_s=None, end_s=None):
     max_chord = {k: int(v) for k, v in (max_chord or {}).items()}
     notes_backup = song.notes
     song.notes = [n for n in song.notes if n.track not in set(skip)]
+    if start_s or end_s:   # Ausschnitt (Sekunden im Original), Start auf Taktanfang
+        bpb = song.beats_per_bar
+        b0 = math.floor((start_s or 0) * song.bpm / 60 / bpb) * bpb
+        b1 = (end_s * song.bpm / 60) if end_s else float("inf")
+        song.notes = [replace(n, beat=n.beat - b0) for n in song.notes if b0 <= n.beat < b1]
     try:
         if not song.notes:
             raise ValueError("Keine Noten (alle Spuren abgewählt?)")
         tpb = float(tpb or tempo_candidates(song)[0]["tpb"])
         tpb = int(tpb) if tpb.is_integer() else tpb
         nbnotes, track_cfg, dropped = arrange(song, tpb, max_chord, transpose, override or {},
-                                             doubles, simple_drums)
+                                             doubles, simple_drums, sustain)
         nbnotes = [n for n in nbnotes if n.layer in set(layers)]
         if not nbnotes:
             raise ValueError("Keine Noten in den gewählten Layern")
@@ -82,7 +89,8 @@ def web_generate(opts_json):
     r = run(_SONG, tpb=o.get("tpb"), max_chord=o.get("max_chord"), transpose=o.get("transpose", 0),
             override=o.get("override"), skip=o.get("skip", []), layers=o.get("layers", LAYERS),
             repeats=o.get("repeats", True), doubles=o.get("doubles"),
-            simple_drums=o.get("simple_drums", False))
+            simple_drums=o.get("simple_drums", False), sustain=o.get("sustain"),
+            start_s=o.get("start_s"), end_s=o.get("end_s"))
     nb, reps, blocks = stats(r["plan"])
     return json.dumps({
         "markdown": r["markdown"], "json": r["json"], "info": r["info"], "tpb": r["tpb"],

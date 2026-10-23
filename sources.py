@@ -13,6 +13,7 @@ class RawNote:
     track: str
     program: int
     drum: bool
+    duration: float = 0.25   # Länge in Schlägen
 
 
 @dataclass
@@ -41,6 +42,7 @@ def load_midi(path, data: bytes = None, title: str = None) -> Song:
     for ti, track in enumerate(mid.tracks):
         name = track.name or f"Spur {ti}"
         programs = {}
+        open_notes = {}
         t = 0
         for msg in track:
             t += msg.time
@@ -51,8 +53,14 @@ def load_midi(path, data: bytes = None, title: str = None) -> Song:
             elif msg.type == "program_change":
                 programs[msg.channel] = msg.program
             elif msg.type == "note_on" and msg.velocity > 0:
-                notes.append(RawNote(t / tpb, msg.note, msg.velocity, name,
-                                     programs.get(msg.channel, 0), msg.channel == 9))
+                n = RawNote(t / tpb, msg.note, msg.velocity, name,
+                            programs.get(msg.channel, 0), msg.channel == 9)
+                notes.append(n)
+                open_notes[(msg.channel, msg.note)] = n
+            elif msg.type in ("note_off", "note_on"):
+                n = open_notes.pop((msg.channel, msg.note), None)
+                if n:
+                    n.duration = max(0.01, t / tpb - n.beat)
     notes.sort(key=lambda n: n.beat)
     return Song(title or Path(path).stem, bpm or 120.0, beats_per_bar, notes, "midi")
 
