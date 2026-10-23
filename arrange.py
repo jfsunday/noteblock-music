@@ -65,7 +65,8 @@ def _fold(pitch, inst_key):
     return pitch - inst.low
 
 
-SIMPLE_DRUMS = {35, 36, 38, 40, 39}   # Kick, Snare, Clap
+SIMPLE_DRUMS = {35, 36, 38, 40, 39,     # Kick, Snare, Clap
+                42, 44, 46, 69, 70}     # Hi-Hats + Shaker = Groove (leise Klicks); Bongos/Congas raus
 
 
 def _parse_spec(spec):
@@ -120,10 +121,8 @@ def arrange(song, tpb, max_chord=None, transpose=0, instrument_override=None, do
         beat = round(n.beat * 12) / 12              # Humanisierung raus (16tel + Triolen)
         if float(tpb).is_integer():
             tick = math.floor(beat * tpb + 0.5)
-        else:   # krummes Tempo: pro Takt runden, damit gleiche Takte gleich bleiben
-            bpb = song.beats_per_bar
-            bar = math.floor(beat / bpb + 1e-9)
-            tick = math.floor(bar * bpb * tpb + 0.5) + math.floor((beat - bar * bpb) * tpb + 0.5)
+        else:   # krummes Tempo: global runden -> max. 0,5 Tick Abweichung (Rhythmus vor Wiederverwendung)
+            tick = math.floor(beat * tpb + 0.5)
         if n.drum:
             inst, clicks = drum_for_gm(n.pitch)
             raw.append(NBNote(tick, "beat", inst, clicks, n.velocity, n.track))

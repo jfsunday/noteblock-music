@@ -88,8 +88,10 @@ def drum_for_gm(note: int):
         return "basedrum", {41: 4, 43: 6, 45: 9, 47: 11, 48: 14, 50: 16}[note]
     if note in (38, 40):
         return "snare", 8
-    if note in (39, 54, 70, 82):                  # Clap, Tambourin, Shaker
+    if note in (39, 54):                          # Clap, Tambourin
         return "snare", 16
+    if note in (69, 70, 82):                      # Cabasa, Maracas, Shaker -> leiser Klick
+        return "hat", 22
     if note in (42, 44):
         return "hat", 18
     if note == 46:
