@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notenblock-Generator – Musik → Minecraft-Bauplan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 2 2%22><rect width=%222%22 height=%222%22 fill=%22%236b4226%22/><rect width=%221%22 height=%221%22 fill=%22%238a5a35%22/><rect x=%221%22 y=%221%22 width=%221%22 height=%221%22 fill=%22%238a5a35%22/></svg>">
+</head>
+<body>
+<header>
+  <div class="logo" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+  <div>
+    <h1>Notenblock-Generator</h1>
+    <p>Musik rein, Minecraft-Bauplan raus. Welcher Notenblock, welcher Block drunter, welche Repeater-Delays – plus Clocks für sich wiederholende Teile.</p>
+  </div>
+</header>
+
+<main>
+  <section id="drop" class="card drop" tabindex="0">
+    <input type="file" id="file" accept=".mid,.midi,.kar,audio/*" hidden>
+    <div class="drop-icon">♪</div>
+    <strong>Datei hier reinziehen oder klicken</strong>
+    <span>MIDI (beste Ergebnisse) oder MP3 / WAV / OGG / FLAC – Audio wird per KI (basic-pitch) in Noten umgewandelt.</span>
+    <span class="muted small">Alles läuft lokal in deinem Browser, nichts wird hochgeladen.</span>
+  </section>
+
+  <div id="status" class="status" hidden>
+    <span id="status-text"></span>
+    <div class="track"><div id="status-bar"></div></div>
+  </div>
+
+  <section id="settings" class="card" hidden>
+    <div class="song-head">
+      <div><h2 id="song-title"></h2><p id="song-meta" class="muted"></p></div>
+    </div>
+
+    <div class="grid">
+      <label class="wide">Tempo in Minecraft <span class="hint">1 Redstone-Tick = 0,1 s – das Tempo muss aufs Tick-Raster passen</span>
+        <select id="tpb"></select>
+      </label>
+      <label>Transponieren (Halbtöne)
+        <input id="transpose" type="number" value="0" min="-24" max="24">
+      </label>
+      <fieldset>
+        <legend>Max. gleichzeitige Notenblöcke</legend>
+        <label class="inline">Beat <input id="mc-beat" type="number" value="3" min="1" max="8"></label>
+        <label class="inline">Bass <input id="mc-bass" type="number" value="2" min="1" max="8"></label>
+        <label class="inline">Melodie <input id="mc-melodie" type="number" value="4" min="1" max="8"></label>
+      </fieldset>
+      <fieldset>
+        <legend>Layer bauen</legend>
+        <label class="inline"><input type="checkbox" name="layer" value="beat" checked> Beat</label>
+        <label class="inline"><input type="checkbox" name="layer" value="bass" checked> Bass</label>
+        <label class="inline"><input type="checkbox" name="layer" value="melodie" checked> Melodie</label>
+      </fieldset>
+      <label class="check"><input id="repeats" type="checkbox" checked>
+        <span>Wiederholungen erkennen <span class="hint">Pattern nur einmal bauen, per Dirigent/Clock mehrfach abspielen</span></span>
+      </label>
+    </div>
+
+    <div id="audio-opts" class="grid audio" hidden>
+      <label>Erkanntes Tempo (BPM)
+        <input id="audio-bpm" type="number" step="0.1" min="40" max="240">
+      </label>
+      <label>Noten-Empfindlichkeit
+        <select id="audio-sens"><option value="low">wenig (sauberer)</option><option value="mid" selected>normal</option><option value="high">viel (mehr Details)</option></select>
+      </label>
+      <label class="check"><input id="audio-drums" type="checkbox" checked> <span>Schlagzeug erkennen</span></label>
+    </div>
+
+    <h3>Spuren</h3>
+    <table id="tracks" class="tracks">
+      <thead><tr><th></th><th>Spur</th><th class="num">Noten</th><th>Notenblock-Instrument</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="results" hidden>
+    <div class="card">
+      <div id="stats" class="stats"></div>
+      <div class="actions">
+        <button id="play" class="primary">▶ Hörprobe</button>
+        <div class="track grow"><div id="progress"></div></div>
+        <button id="dl-md">Markdown</button>
+        <button id="dl-json">JSON</button>
+        <button id="print">Drucken / PDF</button>
+      </div>
+      <p id="selftest"></p>
+    </div>
+    <article id="plan" class="card plan"></article>
+  </section>
+</main>
+
+<footer class="muted small">
+  Läuft komplett im Browser (Python via Pyodide, Audio-Erkennung via Spotify basic-pitch). Auch als CLI: <code>python nbgen.py song.mid</code>.
+</footer>
+<script type="module" src="app.js"></script>
+</body>
+</html>

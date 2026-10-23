@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*_bauplan.md
+*_bauplan.json
+*_vorschau.wav
+*_erkannt.mid
+*.mid
+*.midi
+*.mp3
