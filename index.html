@@ -56,6 +56,11 @@
         <label class="inline"><input type="checkbox" name="layer" value="bass" checked> Bass</label>
         <label class="inline"><input type="checkbox" name="layer" value="melodie" checked> Melodie</label>
       </fieldset>
+      <fieldset>
+        <legend>Ausschnitt (Sekunden im Original)</legend>
+        <label class="inline">von <input id="from-s" type="number" min="0" step="1" placeholder="0"></label>
+        <label class="inline">bis <input id="to-s" type="number" min="0" step="1" placeholder="Ende"></label>
+      </fieldset>
       <label class="check"><input id="simple-drums" type="checkbox">
         <span>Nur Kick + Snare <span class="hint">weniger Schlagzeug, Melodie bleibt hörbar</span></span>
       </label>
@@ -76,7 +81,7 @@
 
     <h3>Spuren</h3>
     <table id="tracks" class="tracks">
-      <thead><tr><th></th><th>Spur</th><th class="num">Noten</th><th>Notenblock-Instrument</th><th>Verdoppeln mit <span class="hint">lauter/präsenter</span></th></tr></thead>
+      <thead><tr><th></th><th>Spur</th><th class="num">Noten</th><th>Notenblock-Instrument</th><th>Verdoppeln mit <span class="hint">lauter/präsenter</span></th><th>Halten <span class="hint">neu anschlagen alle … Ticks</span></th></tr></thead>
       <tbody></tbody>
     </table>
   </section>
@@ -87,11 +92,14 @@
       <div class="actions">
         <button id="play" class="primary">▶ Hörprobe</button>
         <div class="track grow"><div id="progress"></div></div>
+        <button id="copy-lc" class="primary">Für LiteCraft kopieren</button>
+        <button id="dl-schem">.schem</button>
         <button id="dl-md">Markdown</button>
         <button id="dl-json">JSON</button>
         <button id="print">Drucken / PDF</button>
       </div>
       <p id="selftest"></p>
+      <p id="export-info" class="muted small"></p>
     </div>
     <article id="plan" class="card plan"></article>
   </section>

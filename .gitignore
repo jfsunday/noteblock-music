@@ -9,3 +9,5 @@ __pycache__/
 *.mp3
 rickroll-intro*
 final-countdown*
+*_litecraft.json
+*.schem

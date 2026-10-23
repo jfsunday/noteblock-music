@@ -193,6 +193,8 @@ function buildSettings() {
     $("#audio-bpm").value = audioCache.bpm.toFixed(1);
   }
 
+  const auto = c.auto || { skip: [], override: {}, doubles: {}, sustain: {}, roles: {} };
+  $("#simple-drums").checked = !!auto.simple_drums;
   const tb = $("#tracks tbody");
   tb.innerHTML = "";
   const melodicInst = c.instruments.filter((i) => !i.percussion);
@@ -200,12 +202,16 @@ function buildSettings() {
     const tr = document.createElement("tr");
     const instCell = t.drum ? `<span class="muted">Schlagzeug (automatisch)</span>` :
       `<select data-track="${escapeAttr(t.name)}">${c.instruments.map((i) =>
-        `<option value="${i.key}" ${i.key === t.inst ? "selected" : ""}>${i.name} — ${i.block.split(" (")[0]}</option>`).join("")}</select>`;
+        `<option value="${i.key}" ${i.key === (auto.override[t.name] || t.inst) ? "selected" : ""}>${i.name} — ${i.block.split(" (")[0]}</option>`).join("")}</select>`;
     const dblCell = t.drum ? "" :
       `<select data-double="${escapeAttr(t.name)}"><option value="">–</option>${melodicInst.map((i) =>
-        `<option value="${i.key}">${i.name}</option>`).join("")}</select>`;
-    tr.innerHTML = `<td><input type="checkbox" checked data-use="${escapeAttr(t.name)}"></td>
-      <td>${escapeHtml(t.name)}</td><td class="num">${t.notes}</td><td>${instCell}</td><td>${dblCell}</td>`;
+        `<option value="${i.key}" ${i.key === auto.doubles[t.name] ? "selected" : ""}>${i.name}</option>`).join("")}</select>`;
+    const susCell = t.drum ? "" :
+      `<select data-sustain="${escapeAttr(t.name)}">${["", 1, 2, 3, 4, 5].map((v) =>
+        `<option value="${v}" ${String(v) === String(auto.sustain[t.name] || "") ? "selected" : ""}>${v || "–"}</option>`).join("")}</select>`;
+    const role = auto.roles[t.name] ? `<span class="hint">${escapeHtml(auto.roles[t.name])}</span>` : "";
+    tr.innerHTML = `<td><input type="checkbox" ${auto.skip.includes(t.name) ? "" : "checked"} data-use="${escapeAttr(t.name)}"></td>
+      <td>${escapeHtml(t.name)}${role}</td><td class="num">${t.notes}</td><td>${instCell}</td><td>${dblCell}</td><td>${susCell}</td>`;
     tb.append(tr);
   }
 }
@@ -215,10 +221,9 @@ const escapeAttr = escapeHtml;
 
 function options() {
   const override = {}, skip = [];
-  document.querySelectorAll("#tracks select[data-track]").forEach((s) => {
-    const t = current.tracks.find((x) => x.name === s.dataset.track);
-    if (s.value !== t.inst) override[s.dataset.track] = s.value;
-  });
+  document.querySelectorAll("#tracks select[data-track]").forEach((s) => { override[s.dataset.track] = s.value; });
+  const sustain = {};
+  document.querySelectorAll("#tracks select[data-sustain]").forEach((s) => { if (s.value) sustain[s.dataset.sustain] = +s.value; });
   document.querySelectorAll("#tracks input[data-use]").forEach((c) => { if (!c.checked) skip.push(c.dataset.use); });
   const doubles = {};
   document.querySelectorAll("#tracks select[data-double]").forEach((s) => { if (s.value) doubles[s.dataset.double] = s.value; });
@@ -228,7 +233,8 @@ function options() {
     transpose: parseInt($("#transpose").value) || 0,
     max_chord: { beat: +$("#mc-beat").value, bass: +$("#mc-bass").value, melodie: +$("#mc-melodie").value },
     repeats: $("#repeats").checked, layers, override, skip, doubles,
-    simple_drums: $("#simple-drums").checked,
+    simple_drums: $("#simple-drums").checked, sustain, auto: false,
+    start_s: parseFloat($("#from-s").value) || null, end_s: parseFloat($("#to-s").value) || null,
   };
 }
 
@@ -309,6 +315,25 @@ function download(name, text, type) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
+$("#copy-lc").onclick = async () => {
+  const r = await py("export", { kind: "litecraft" });
+  try {
+    await navigator.clipboard.writeText(r.data);
+    $("#export-info").textContent = `In die Zwischenablage kopiert: ${r.blocks} Blöcke, ${r.noteblocks} Notenblöcke, ${r.lines} Leitungen, Größe ${r.size.join("×")}. In LiteCraft einfügen (Strg+V) und den Knopf am Start drücken.`;
+  } catch {
+    download(current.title + "_litecraft.json", r.data, "application/json");
+    $("#export-info").textContent = "Zwischenablage nicht erlaubt – als Datei heruntergeladen.";
+  }
+};
+$("#dl-schem").onclick = async () => {
+  const r = await py("export", { kind: "schem" });
+  const bin = Uint8Array.from(atob(r.data), (c) => c.charCodeAt(0));
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([bin], { type: "application/octet-stream" }));
+  a.download = current.title + ".schem";
+  a.click();
+  $("#export-info").textContent = `.schem: ${r.blocks} Blöcke, ${r.noteblocks} Notenblöcke, Größe ${r.size.join("×")} (Litematica/WorldEdit/LiteCraft).`;
+};
 $("#dl-md").onclick = () => download(current.title + "_bauplan.md", lastResult.markdown, "text/markdown");
 $("#dl-json").onclick = () => download(current.title + "_bauplan.json", lastResult.json, "application/json");
 $("#print").onclick = () => { document.querySelectorAll("#plan details").forEach((d) => (d.open = true)); window.print(); };

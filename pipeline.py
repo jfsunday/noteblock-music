@@ -94,18 +94,24 @@ def _describe():
         "title": song.title, "bpm": song.bpm, "source": song.source, "notes": len(song.notes),
         "tempos": sorted(cands, key=lambda c: c["tpb"]), "recommended": cands[0]["tpb"],
         "tracks": list(tracks.values()),
+        "auto": {k: v for k, v in auto_config(song).items()},
         "instruments": [{"key": i.key, "name": i.name, "block": i.block, "percussion": i.percussion}
                         for i in INSTRUMENTS.values()],
     })
 
 
+_LAST = None
+
+
 def web_generate(opts_json):
+    global _LAST
     o = json.loads(opts_json)
-    r = run(_SONG, tpb=o.get("tpb"), max_chord=o.get("max_chord"), transpose=o.get("transpose", 0),
+    r = run(_SONG, auto=o.get("auto", False), tpb=o.get("tpb"), max_chord=o.get("max_chord"), transpose=o.get("transpose", 0),
             override=o.get("override"), skip=o.get("skip", []), layers=o.get("layers", LAYERS),
             repeats=o.get("repeats", True), doubles=o.get("doubles"),
             simple_drums=o.get("simple_drums", False), sustain=o.get("sustain"),
             start_s=o.get("start_s"), end_s=o.get("end_s"))
+    _LAST = r
     nb, reps, blocks = stats(r["plan"])
     return json.dumps({
         "markdown": r["markdown"], "json": r["json"], "info": r["info"], "tpb": r["tpb"],
@@ -114,3 +120,17 @@ def web_generate(opts_json):
                   "blocks": blocks.most_common()},
         "played": [[t, INSTRUMENTS[i].low + c, i] for t, i, c, _ in r["played"]],
     })
+
+
+def web_export(kind):
+    """LiteCraft-JSON (Zwischenablage) oder .schem (base64) aus dem letzten Ergebnis."""
+    import base64
+    from layout import build_layout, to_litecraft_json, to_schem
+    r = _LAST
+    lay = build_layout(r["played"])
+    if kind == "litecraft":
+        text = to_litecraft_json(lay, r["song"].title, round(600 / r["tpb"], 1))
+    else:
+        text = base64.b64encode(to_schem(lay)).decode()
+    return json.dumps({"data": text, "size": lay["size"], "lines": lay["lines"],
+                       "noteblocks": len(lay["schedule"]), "blocks": len(lay["blocks"])})
