@@ -35,6 +35,8 @@ def main():
                     help="lange Töne alle N Ticks neu anschlagen (Tremolo statt kurzem Pling), z.B. STRINGS=2")
     ap.add_argument("--from", dest="start_s", type=float, help="Ausschnitt ab Sekunde (Original)")
     ap.add_argument("--to", dest="end_s", type=float, help="Ausschnitt bis Sekunde (Original)")
+    ap.add_argument("--schichten", type=int, default=3, help="3D-Export: max. Schichten übereinander (Standard 3)")
+    ap.add_argument("--export", action="store_true", help="zusätzlich 3D-Struktur als .schem + LiteCraft-JSON schreiben")
     ap.add_argument("--manual", action="store_true", help="Auto-Arrangeur aus (alle Spuren, nichts automatisch)")
     ap.add_argument("--keep", action="append", default=[], metavar="SPUR", help="Spur trotz Auto-Auswahl behalten")
     ap.add_argument("--simple-drums", action="store_true", help="nur Kick/Snare/Clap")
@@ -91,6 +93,15 @@ def main():
         wav = base.with_name(base.name + "_vorschau.wav")
         real = render(played, wav, assets=a.sounds)
         print(f"→ {wav} (Hörprobe, {'echte Minecraft-Sounds' if real else 'Synth-Ersatzsounds'})")
+    if a.export:
+        from layout import build_layout, to_litecraft_json, to_schem
+        lay = build_layout(played, max_layers=a.schichten)
+        base.with_name(base.name + ".schem").write_bytes(to_schem(lay))
+        base.with_name(base.name + "_litecraft.json").write_text(
+            to_litecraft_json(lay, song.title, round(600 / tpb, 1)), encoding="utf-8")
+        w, h, l = lay["size"]
+        print(f"→ 3D: {base.name}.schem + _litecraft.json ({w}×{l} Grundfläche, {h} hoch, "
+              f"{lay['layers']} Schicht(en), {len(lay['schedule'])} Notenblöcke)")
     if a.save_midi and song.source == "audio":
         save_midi(song, base.with_name(base.name + "_erkannt.mid"))
 

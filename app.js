@@ -316,23 +316,23 @@ function download(name, text, type) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 $("#copy-lc").onclick = async () => {
-  const r = await py("export", { kind: "litecraft" });
+  const r = await py("export", { kind: "litecraft", layers: +$("#max-layers").value || 1 });
   try {
     await navigator.clipboard.writeText(r.data);
-    $("#export-info").textContent = `In die Zwischenablage kopiert: ${r.blocks} Blöcke, ${r.noteblocks} Notenblöcke, ${r.lines} Leitungen, Größe ${r.size.join("×")}. In LiteCraft einfügen (Strg+V) und den Knopf am Start drücken.`;
+    $("#export-info").textContent = `In die Zwischenablage kopiert: ${r.blocks} Blöcke, ${r.noteblocks} Notenblöcke, ${r.lines} Leitungen, ${r.layers} Schicht(en), Größe ${r.size[0]}×${r.size[2]} Grundfläche, ${r.size[1]} hoch. In LiteCraft einfügen (Strg+V) und den Knopf am Start drücken.`;
   } catch {
     download(current.title + "_litecraft.json", r.data, "application/json");
     $("#export-info").textContent = "Zwischenablage nicht erlaubt – als Datei heruntergeladen.";
   }
 };
 $("#dl-schem").onclick = async () => {
-  const r = await py("export", { kind: "schem" });
+  const r = await py("export", { kind: "schem", layers: +$("#max-layers").value || 1 });
   const bin = Uint8Array.from(atob(r.data), (c) => c.charCodeAt(0));
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([bin], { type: "application/octet-stream" }));
   a.download = current.title + ".schem";
   a.click();
-  $("#export-info").textContent = `.schem: ${r.blocks} Blöcke, ${r.noteblocks} Notenblöcke, Größe ${r.size.join("×")} (Litematica/WorldEdit/LiteCraft).`;
+  $("#export-info").textContent = `.schem: ${r.blocks} Blöcke, ${r.noteblocks} Notenblöcke, ${r.layers} Schicht(en), ${r.size[0]}×${r.size[2]} Grundfläche, ${r.size[1]} hoch (Litematica/WorldEdit/LiteCraft).`;
 };
 $("#dl-md").onclick = () => download(current.title + "_bauplan.md", lastResult.markdown, "text/markdown");
 $("#dl-json").onclick = () => download(current.title + "_bauplan.json", lastResult.json, "application/json");

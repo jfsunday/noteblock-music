@@ -122,15 +122,15 @@ def web_generate(opts_json):
     })
 
 
-def web_export(kind):
+def web_export(kind, max_layers=3):
     """LiteCraft-JSON (Zwischenablage) oder .schem (base64) aus dem letzten Ergebnis."""
     import base64
     from layout import build_layout, to_litecraft_json, to_schem
     r = _LAST
-    lay = build_layout(r["played"])
+    lay = build_layout(r["played"], max_layers=int(max_layers or 1))
     if kind == "litecraft":
         text = to_litecraft_json(lay, r["song"].title, round(600 / r["tpb"], 1))
     else:
         text = base64.b64encode(to_schem(lay)).decode()
-    return json.dumps({"data": text, "size": lay["size"], "lines": lay["lines"],
+    return json.dumps({"data": text, "size": lay["size"], "lines": lay["lines"], "layers": lay["layers"],
                        "noteblocks": len(lay["schedule"]), "blocks": len(lay["blocks"])})

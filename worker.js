@@ -27,7 +27,7 @@ self.onmessage = async (e) => {
     else if (cmd === "midi") out = api.web_load_midi(args.data, args.title);
     else if (cmd === "audio") out = api.web_load_audio(args.title, args.bpm, JSON.stringify(args.melodic), JSON.stringify(args.drums));
     else if (cmd === "generate") out = api.web_generate(JSON.stringify(args));
-    else if (cmd === "export") out = api.web_export(args.kind);
+    else if (cmd === "export") out = api.web_export(args.kind, args.layers);
     self.postMessage({ id, ok: true, result: JSON.parse(out) });
   } catch (err) {
     let msg = String(err && err.message || err);
