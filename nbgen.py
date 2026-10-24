@@ -37,8 +37,8 @@ def main():
     ap.add_argument("--to", dest="end_s", type=float, help="Ausschnitt bis Sekunde (Original)")
     ap.add_argument("--schichten", type=int, default=3, help="3D-Export: max. Schichten übereinander (Standard 3)")
     ap.add_argument("--export", action="store_true", help="zusätzlich 3D-Struktur als .schem + LiteCraft-JSON schreiben")
-    ap.add_argument("--max-gleichzeitig", dest="max_poly", type=int, default=8,
-                    help="höchstens N Notenblöcke gleichzeitig (weniger Leitungen = kompakter, 0 = aus; Standard 8)")
+    ap.add_argument("--max-gleichzeitig", dest="max_poly", type=int, default=0,
+                    help="höchstens N Notenblöcke gleichzeitig (weniger Leitungen = kompakter, ändert den Klang; 0 = aus = Standard)")
     ap.add_argument("--manual", action="store_true", help="Auto-Arrangeur aus (alle Spuren, nichts automatisch)")
     ap.add_argument("--keep", action="append", default=[], metavar="SPUR", help="Spur trotz Auto-Auswahl behalten")
     ap.add_argument("--simple-drums", action="store_true", help="nur Kick/Snare/Clap")
