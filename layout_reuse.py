@@ -443,7 +443,7 @@ XT = XP0 - 2               # Start-Stamm (Treppe) bei x = XT, negative z
 
 def _trunk_start(f):
     """Zeit, zu der der Startblock (XP0, 2, -2) von Etage f gepowert wird (Knopf bei t=0)."""
-    return 2 + 11 * f
+    return 2 + 3 * f
 
 
 def _stack(floors, starts, Gt):
@@ -452,27 +452,29 @@ def _stack(floors, starts, Gt):
     def put(x, y, z, st):
         blocks[(x, y, z)] = st
 
-    put(XT, 2, -2, "minecraft:stone")
-    put(XT, 3, -2, "minecraft:stone_button[face=floor,facing=north,powered=false]")
+    # Knopf auf (XT-2, 2, -4). Je Etage: Repeater (XT-1) -> Abzweig-Block (XT, -4) -> Redstone ->
+    # Block (XP0, -4) -> Repeater (XP0, -3) -> Startblock (XP0, -2). Weiter: Repeater (XT, -5),
+    # Redstone nach Westen (z=-6, mit Repeater), Treppe nach Osten hoch (z=-4) zur nächsten Etage.
+    put(XT - 2, 2, -4, "minecraft:stone")
+    put(XT - 2, 3, -4, "minecraft:stone_button[face=floor,facing=north,powered=false]")
     for f in range(len(floors)):
         y = FLOOR_H * f + 2
-        zr = -3 - 9 * f
-        if f > 0:
-            put(XT, y - 1, zr, SUPPORT)
-        put(XT, y - 1 if f == 0 else y - 1, zr, SUPPORT)
-        put(XT, y, zr, _repeater(1, "south"))
-        zb = zr - 1
-        put(XT, y, zb, SUPPORT)                                         # Abzweig-Block (stark)
-        put(XT + 1, y - 1, zb, SUPPORT); put(XT + 1, y, zb, _wire())
-        put(XP0, y, zb, SUPPORT)                                        # schwach gepowert
-        for zz in range(zb + 1, -2):
-            put(XP0, y - 1, zz, SUPPORT); put(XP0, y, zz, _repeater(1, "north"))
-        put(XP0, y, -2, "minecraft:stone")                              # Startblock der Etage
-        assert starts[f] == 1 + 2 * f + (-3 - zb), (starts[f], f)
+        put(XT - 1, y - 1, -4, SUPPORT); put(XT - 1, y, -4, _repeater(1, "west"))
+        put(XT, y, -4, SUPPORT)                                          # Abzweig-Block (stark)
+        put(XT + 1, y - 1, -4, SUPPORT); put(XT + 1, y, -4, _wire())
+        put(XP0, y, -4, SUPPORT)                                         # schwach gepowert
+        put(XP0, y - 1, -3, SUPPORT); put(XP0, y, -3, _repeater(1, "north"))
+        put(XP0, y, -2, "minecraft:stone")                               # Startblock der Etage
         if f + 1 < len(floors):
-            put(XT, y - 1, zb - 1, SUPPORT); put(XT, y, zb - 1, _repeater(1, "south"))
-            for k in range(1, FLOOR_H + 1):
-                put(XT, y + k - 1, zb - 1 - k, SUPPORT); put(XT, y + k, zb - 1 - k, _wire())
+            put(XT, y - 1, -5, SUPPORT); put(XT, y, -5, _repeater(1, "south"))
+            for x in range(XT, XT - 10, -1):                             # nach Westen (z = -6)
+                put(x, y - 1, -6, SUPPORT)
+                put(x, y, -6, _repeater(1, "east") if x == XT - 5 else _wire())
+            put(XT - 9, y - 1, -5, SUPPORT); put(XT - 9, y, -5, _wire())
+            put(XT - 9, y - 1, -4, SUPPORT); put(XT - 9, y, -4, _wire())
+            for k in range(1, FLOOR_H + 1):                              # Treppe hoch nach Osten
+                put(XT - 9 + k, y + k - 1, -4, SUPPORT); put(XT - 9 + k, y + k, -4, _wire())
+            put(XT - 2, y + FLOOR_H - 1, -4, SUPPORT); put(XT - 2, y + FLOOR_H, -4, _wire())
     for f, fl in enumerate(floors):
         yb = FLOOR_H * f
         for (x, yy, zz), st in fl["blocks"].items():
@@ -486,13 +488,86 @@ def _stack(floors, starts, Gt):
     for sch in schedule:
         sch[1] -= mn[0]; sch[2] -= mn[1]; sch[3] -= mn[2]
     size = (max(xs) - mn[0] + 1, max(ys) - mn[1] + 1, max(zs_) - mn[2] + 1)
-    st = (XT - mn[0], 3 - mn[1], -2 - mn[2])
+    st = (XT - 2 - mn[0], 3 - mn[1], -4 - mn[2])
     return {"blocks": norm, "size": size, "schedule": sorted(schedule), "start_button": st,
             "lines": sum(fl["lines"] for fl in floors), "layers": len(floors),
             "width": floors[0]["width"], "offset": Gt, "passes": sum(fl["passes"] for fl in floors)}
 
 
+def _compress(cb, assign, P, dist, cells, kind, segs):
+    """Durchgänge nur so lang wie nötig: Wendepunkte so nah wie möglich an die Abgriffe,
+    nur verlängern, wenn ein Abschnitt sonst nicht genug Verzögerung (max. 4 Ticks/Repeater) hätte."""
+    tz = {u: (assign[u][0], cb.Z[assign[u][1]]) for u in assign}
+    order = [u for _, _, u in segs]
+    lastp = max(p for p, _ in tz.values())
+    on = defaultdict(list)
+    for u in order:
+        on[tz[u][0]].append(tz[u][1])
+    # Wende k liegt zwischen Durchgang k und k+1; gerade k: oben (h), ungerade: unten (l)
+    lo_lim, hi_lim = cb.ZMIN, cb.ZMAX
+    turn = {}
+    for k in range(lastp):
+        a, b = on.get(k, []), on.get(k + 1, [])
+        if k % 2 == 0:
+            turn[k] = max([lo_lim + 1] + a + [z + 1 for z in b])
+        else:
+            turn[k] = min([hi_lim - 1] + a + [z - 1 for z in b])
+
+    def build():
+        cl = []
+        for p in range(lastp + 1):
+            start = cb.ZMIN if p == 0 else turn[p - 1]
+            end = turn[p] if p < lastp else (max(on[p]) if p % 2 == 0 else min(on[p]))
+            rng = range(start, end + 1) if p % 2 == 0 else range(start, end - 1, -1)
+            cl += [("P", p, z) for z in rng]
+            if p < lastp:
+                zt = turn[p] + 1 if p % 2 == 0 else turn[p] - 1
+                cl += [("T", p, zt), ("T", p + 0.5, zt), ("T", p + 1, zt)]
+        idx = {(c[1], c[2]): i for i, c in enumerate(cl) if c[0] == "P"}
+        tl = [(idx[tz[u]], u) for u in order]
+        kd = ["S" if i in {t for t, _ in tl} else ("D" if c[0] == "T" else "F") for i, c in enumerate(cl)]
+        if kd[0] != "S":
+            kd[0] = "R"
+        for i, _ in tl:
+            assert kd[i - 1] not in ("S", "D")
+            kd[i - 1] = "R"
+        sg, prev = [], -1
+        for i, u in tl:
+            sg.append((prev, i, u))
+            prev = i
+        return cl, kd, sg
+
+    tval = {u: dist[("t", i)] for _, i, u in segs}
+    for _ in range(100000):
+        cl, kd, sg = build()
+        grow = None
+        for a, i, u in sg:
+            prev = 0 if a < 0 else tval[next(uu for aa, ii, uu in sg if ii == a)]
+            need = tval[u] - prev
+            lohi = Crossbar.seg_lohi(kd, a, i)
+            assert lohi is not None and lohi[0] <= need, (lohi, need)
+            if lohi[1] < need:
+                # Wenden in diesem Abschnitt nach außen schieben
+                pa = cl[a][1] if a >= 0 else 0
+                pb = cl[i][1]
+                cand = [k for k in range(int(pa), int(pb)) if
+                        (k % 2 == 0 and turn[k] < hi_lim) or (k % 2 == 1 and turn[k] > lo_lim)]
+                assert cand, "Abschnitt braucht mehr Verzögerung als möglich"
+                k = min(cand, key=lambda k: (turn[k] - lo_lim) if k % 2 == 0 else (hi_lim - turn[k]))
+                step = max(1, (need - lohi[1]) // 8)
+                turn[k] = min(hi_lim, turn[k] + step) if k % 2 == 0 else max(lo_lim, turn[k] - step)
+                grow = k
+                break
+        if grow is None:
+            break
+    nd = dict(dist)
+    for _, i, u in sg:
+        nd[("t", i)] = tval[u]
+    return cl, kd, sg, nd
+
+
 def _realize(cb, assign, P, dist, cells, kind, segs, per, sums, lead):
+    cells, kind, segs, dist = _compress(cb, assign, P, dist, cells, kind, segs)
     blocks = {}
 
     def put(x, y, z, s):

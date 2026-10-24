@@ -299,10 +299,61 @@ def _bus_times(blocks, layers, assign, first_z):
     return times
 
 
+# ---------------- Redstone-Verbindungen (Blockstates wie in Vanilla) ----------------
+_HD = {"north": (0, -1), "south": (0, 1), "west": (-1, 0), "east": (1, 0)}
+_OPP = {"north": "south", "south": "north", "west": "east", "east": "west"}
+_SEE_THROUGH = ("air", "glass", "glowstone", "redstone_wire", "repeater", "button", "note_block_never")
+
+
+def _bname(st):
+    return st.split("[")[0].replace("minecraft:", "") if st else "air"
+
+
+def _solid(st):
+    n = _bname(st)
+    return not any(t in n for t in _SEE_THROUGH)
+
+
+def wire_states(blocks):
+    """Setzt bei jedem Redstone die echten Verbindungen (side/up/none). Ohne das zeigen
+    Schematic-Tools nur Punkte, und Punkte verhalten sich in Vanilla anders als Linien."""
+    out = dict(blocks)
+    for (x, y, z), st in blocks.items():
+        if _bname(st) != "redstone_wire":
+            continue
+        above_solid = _solid(blocks.get((x, y + 1, z)))
+        con = {}
+        for d, (dx, dz) in _HD.items():
+            q = (x + dx, y, z + dz)
+            qs = blocks.get(q)
+            n = _bname(qs)
+            c = "none"
+            if n == "redstone_wire":
+                c = "side"
+            elif n == "repeater":
+                facing = qs.split("facing=")[1].split(",")[0].split("]")[0]
+                if facing in (d, _OPP[d]):
+                    c = "side"
+            elif _solid(qs):
+                if not above_solid and _bname(blocks.get((q[0], y + 1, q[2]))) == "redstone_wire":
+                    c = "up"
+            elif _bname(blocks.get((q[0], y - 1, q[2]))) == "redstone_wire":
+                c = "side"
+            con[d] = c
+        used = [d for d, c in con.items() if c != "none"]
+        if not used:
+            con = {d: "side" for d in con}                   # Kreuz (Vanilla-Standard ohne Nachbarn)
+        elif len(used) == 1 and con[_OPP[used[0]]] == "none":
+            con[_OPP[used[0]]] = "side"                      # einzelne Verbindung -> gerade Linie
+        out[(x, y, z)] = ("minecraft:redstone_wire[east={east},north={north},power=0,south={south},west={west}]"
+                          .format(**con))
+    return out
+
+
 # ---------------- Export: LiteCraft-Zwischenablage (JSON) ----------------
 def to_litecraft_json(layout, title, bpm):
     palette, index, data = [], {}, []
-    for (x, y, z), state in sorted(layout["blocks"].items()):
+    for (x, y, z), state in sorted(wire_states(layout["blocks"]).items()):
         if state not in index:
             index[state] = len(palette)
             palette.append(state)
@@ -366,7 +417,7 @@ def to_schem(layout, data_version=4786):
     w, h, l = layout["size"]
     palette = {"minecraft:air": 0}
     grid = [0] * (w * h * l)
-    for (x, y, z), state in layout["blocks"].items():
+    for (x, y, z), state in wire_states(layout["blocks"]).items():
         pid = palette.setdefault(state, len(palette))
         grid[x + z * w + y * w * l] = pid
     data = bytearray()
