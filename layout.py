@@ -38,8 +38,13 @@ FLOOR = "minecraft:stone"
 S_BLOCK = "minecraft:smooth_stone"      # leitender Block, den der Repeater powert
 ROW = 4                                 # Bahnabstand in Z
 BUS_REPEATER_EVERY = 16                 # Repeater bei z = 14, 30, 46 … (nie auf einer Bahn)
-PER_STEP = 2                            # Notenblöcke pro Schritt (links + rechts)
-LAYER_H = 3
+PER_STEP = 3                            # Notenblöcke pro Schritt: links, rechts + oben auf dem Schaltblock
+LAYER_H = 4                             # Boden, Technik, Notenblock oben, Luft
+NON_CONDUCTIVE = ("glass", "glowstone", "soul_sand")   # können nicht als Schaltblock dienen
+
+
+def _conductive(inst):
+    return not any(n in INST_BLOCK[inst] for n in NON_CONDUCTIVE)
 X0 = 3                                  # erste Spalte der Bahnen (x=0 Bus, x=1 Einspeisung, x=2 Kurven)
 DIR = {1: "west", -1: "east"}           # Repeater-facing (= Eingangsseite) je Laufrichtung
 
@@ -63,12 +68,19 @@ def _split_lines(played):
     by_tick = defaultdict(set)
     for tick, inst, clicks, *_ in played:
         by_tick[tick].add((inst, clicks))
-    width = max(len(v) for v in by_tick.values())
-    lines = []
-    for k in range(0, width, PER_STEP):
-        steps = {t: sorted(v)[k:k + PER_STEP] for t, v in by_tick.items() if len(v) > k}
-        lines.append((None, steps))
-    return lines
+    lines = defaultdict(dict)
+    for t, v in by_tick.items():
+        cond = sorted(n for n in v if _conductive(n[0]))
+        nonc = sorted(n for n in v if not _conductive(n[0]))
+        k = 0
+        while cond or nonc:
+            top = cond.pop(0) if (cond and PER_STEP >= 3) else None
+            sides = []
+            while len(sides) < 2 and (nonc or cond):
+                sides.append(nonc.pop(0) if nonc else cond.pop(0))
+            lines[k][t] = {"sides": sides, "top": top}
+            k += 1
+    return [(None, lines[k]) for k in sorted(lines)]
 
 
 def _tokens(steps, start_time):
@@ -105,11 +117,11 @@ def build_layout(played, max_layers=3, width=None):
     lines = _split_lines(played)
     # Sehr lange Leitungen abwechselnd aufteilen (Schritt 1,3,5… / 2,4,6…), damit sie sich
     # gleichmäßig auf die Schichten verteilen lassen
-    target = 2 * max_layers
+    target = max_layers
     for _ in range(64):
         lens = [len(_tokens(st, 0)) for _, st in lines]
         i = max(range(len(lines)), key=lambda j: lens[j])
-        if len(lines) >= target and lens[i] <= 1.3 * sum(lens) / target:
+        if len(lines) >= target and lens[i] <= 1.6 * sum(lens) / target:
             break
         if len(lines[i][1]) < 2 or len(lines) >= 4 * max_layers + 8:
             break
@@ -158,17 +170,18 @@ def build_layout(played, max_layers=3, width=None):
         put(0, y - 1, -1, FLOOR)
         put(0, y, -1, _repeater(1, "north"))                             # Einspeisung Schicht k
         if k + 1 < layers:                                               # Treppe zu Schicht k+1
+            H = LAYER_H
             put(0, y, -3, _repeater(1, "south")); put(0, y - 1, -3, FLOOR)
             put(0, y, -4, _wire()); put(0, y - 1, -4, FLOOR)
-            put(0, y + 1, -5, _wire()); put(0, y, -5, FLOOR)
-            put(0, y + 2, -6, _wire()); put(0, y + 1, -6, FLOOR)
-            put(0, y + 3, -7, _wire()); put(0, y + 2, -7, FLOOR)
-            put(-1, y + 3, -7, _wire()); put(-1, y + 2, -7, FLOOR)
-            for z in range(-7, -1):                                      # Rückweg bei x=-2
-                put(-2, y + 3, z, _wire()); put(-2, y + 2, z, FLOOR)
-            put(-1, y + 3, -2, _wire()); put(-1, y + 2, -2, FLOOR)
-            put(0, y + 3, -2, _wire())                                   # verteilt auf Einspeisung + nächste Treppe
-            put(0, y + 2, -2, FLOOR)
+            for k2 in range(1, H + 1):                                   # Redstone-Treppe hoch
+                put(0, y + k2, -4 - k2, _wire()); put(0, y + k2 - 1, -4 - k2, FLOOR)
+            ztop = -4 - H
+            put(-1, y + H, ztop, _wire()); put(-1, y + H - 1, ztop, FLOOR)
+            for z in range(ztop, -1):                                    # Rückweg bei x=-2
+                put(-2, y + H, z, _wire()); put(-2, y + H - 1, z, FLOOR)
+            put(-1, y + H, -2, _wire()); put(-1, y + H - 1, -2, FLOOR)
+            put(0, y + H, -2, _wire())                                   # verteilt auf Einspeisung + nächste Treppe
+            put(0, y + H - 1, -2, FLOOR)
 
     # Bahnzahl mit echten Startzeiten nachrechnen, bis stabil
     for _ in range(6):
@@ -213,8 +226,12 @@ def build_layout(played, max_layers=3, width=None):
                 else:
                     _, tick, notes = tok
                     del blocks[(x, y - 1, z)]                            # S braucht keinen Boden
-                    put(x, y, z, S_BLOCK)
-                    for side, (ninst, clicks) in zip((1, -1), notes):
+                    top = notes["top"]
+                    put(x, y, z, INST_BLOCK[top[0]] if top else S_BLOCK)  # Schaltblock = Instrument oben
+                    if top:
+                        put(x, y + 1, z, _note_block(*top))
+                        schedule.append([tick, x, y + 1, z, top[0], top[1]])
+                    for side, (ninst, clicks) in zip((1, -1), notes["sides"]):
                         put(x, y - 1, z + side, INST_BLOCK[ninst])
                         put(x, y, z + side, _note_block(ninst, clicks))
                         schedule.append([tick, x, y, z + side, ninst, clicks])

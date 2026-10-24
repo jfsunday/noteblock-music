@@ -37,6 +37,8 @@ def main():
     ap.add_argument("--to", dest="end_s", type=float, help="Ausschnitt bis Sekunde (Original)")
     ap.add_argument("--schichten", type=int, default=3, help="3D-Export: max. Schichten übereinander (Standard 3)")
     ap.add_argument("--export", action="store_true", help="zusätzlich 3D-Struktur als .schem + LiteCraft-JSON schreiben")
+    ap.add_argument("--max-gleichzeitig", dest="max_poly", type=int, default=8,
+                    help="höchstens N Notenblöcke gleichzeitig (weniger Leitungen = kompakter, 0 = aus; Standard 8)")
     ap.add_argument("--manual", action="store_true", help="Auto-Arrangeur aus (alle Spuren, nichts automatisch)")
     ap.add_argument("--keep", action="append", default=[], metavar="SPUR", help="Spur trotz Auto-Auswahl behalten")
     ap.add_argument("--simple-drums", action="store_true", help="nur Kick/Snare/Clap")
@@ -71,7 +73,7 @@ def main():
             layers=a.layers.split(","), repeats=not a.no_repeats,
             doubles=dict(x.split("=", 1) for x in a.double), simple_drums=a.simple_drums,
             sustain=dict(x.split("=", 1) for x in a.sustain), start_s=a.start_s, end_s=a.end_s,
-            auto=not a.manual, keep=a.keep)
+            auto=not a.manual, keep=a.keep, max_poly=a.max_poly)
     plan, placed, played, tpb = r["plan"], r["placed"], r["played"], r["tpb"]
     if r["info"]["roles"]:
         print("Auto-Arrangement: " + ", ".join(f"{t} = {role}" for t, role in sorted(r["info"]["roles"].items())))

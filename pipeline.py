@@ -12,7 +12,7 @@ from planner import build_plan, simulate
 
 def run(song, tpb=None, max_chord=None, transpose=0, override=None, skip=(), layers=LAYERS,
         repeats=True, doubles=None, simple_drums=False, sustain=None, start_s=None, end_s=None,
-        auto=True, keep=()):
+        auto=True, keep=(), max_poly=None):
     """auto=True: Auto-Arrangeur (auto.py) schlägt Spuren/Instrumente/Tremolo vor,
     explizite Angaben überschreiben ihn. keep: Spuren trotz Auto-Auswahl behalten."""
     roles = {}
@@ -40,7 +40,7 @@ def run(song, tpb=None, max_chord=None, transpose=0, override=None, skip=(), lay
         tpb = float(tpb or tempo_candidates(song)[0]["tpb"])
         tpb = int(tpb) if tpb.is_integer() else tpb
         nbnotes, track_cfg, dropped = arrange(song, tpb, max_chord, transpose, override or {},
-                                             doubles, simple_drums, sustain)
+                                             doubles, simple_drums, sustain, max_poly)
         nbnotes = [n for n in nbnotes if n.layer in set(layers)]
         if not nbnotes:
             raise ValueError("Keine Noten in den gewählten Layern")
@@ -110,7 +110,7 @@ def web_generate(opts_json):
             override=o.get("override"), skip=o.get("skip", []), layers=o.get("layers", LAYERS),
             repeats=o.get("repeats", True), doubles=o.get("doubles"),
             simple_drums=o.get("simple_drums", False), sustain=o.get("sustain"),
-            start_s=o.get("start_s"), end_s=o.get("end_s"))
+            start_s=o.get("start_s"), end_s=o.get("end_s"), max_poly=o.get("max_poly"))
     _LAST = r
     nb, reps, blocks = stats(r["plan"])
     return json.dumps({

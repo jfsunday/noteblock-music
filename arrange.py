@@ -19,6 +19,7 @@ class NBNote:
     clicks: int
     velocity: int = 100
     track: str = ""
+    retrig: bool = False         # Wiederholungsanschlag (Tremolo) – unwichtig beim Ausdünnen
 
     @property
     def pitch(self) -> int:
@@ -96,8 +97,42 @@ def _parse_spec(spec):
     return m.group(1), int(m.group(2)) if m.group(2) else None
 
 
+def _priority(n, top_mel, low_bass):
+    """Wichtigkeit einer Note beim Begrenzen gleichzeitiger Notenblöcke."""
+    if n.retrig:
+        return -100 + n.velocity / 10
+    if n.layer == "melodie":
+        return (60 if n is top_mel else 20) + n.velocity / 10
+    if n.layer == "bass":
+        return (50 if n is low_bass else 10) + n.velocity / 10
+    if n.inst in ("basedrum", "snare"):
+        return 55 + n.velocity / 10
+    return 5 + n.velocity / 10                     # Hi-Hats & Co.
+
+
+def limit_polyphony(notes, max_poly):
+    """Pro Zeitpunkt höchstens max_poly Notenblöcke (weniger parallele Leitungen im 3D-Bau)."""
+    if not max_poly:
+        return notes, 0
+    by_tick = defaultdict(list)
+    for n in notes:
+        by_tick[n.tick].append(n)
+    out, dropped = [], 0
+    for t, ns in by_tick.items():
+        if len(ns) > max_poly:
+            mel = [n for n in ns if n.layer == "melodie" and not n.retrig]
+            bas = [n for n in ns if n.layer == "bass" and not n.retrig]
+            top = max(mel, key=lambda n: n.pitch) if mel else None
+            low = min(bas, key=lambda n: n.pitch) if bas else None
+            ns = sorted(ns, key=lambda n: -_priority(n, top, low))
+            dropped += len(ns) - max_poly
+            ns = ns[:max_poly]
+        out.extend(ns)
+    return out, dropped
+
+
 def arrange(song, tpb, max_chord=None, transpose=0, instrument_override=None, doubles=None,
-            simple_drums=False, sustain=None):
+            simple_drums=False, sustain=None, max_poly=None):
     """doubles: {Spur: 'bell+2'} -> Spur zusätzlich mit 2. Instrument (lauter/präsenter).
     simple_drums: nur Kick, Snare, Clap (Melodie bleibt hörbar).
     sustain: {Spur: N} -> lange Töne alle N Ticks neu anschlagen (Notenblöcke klingen nicht nach)."""
@@ -159,7 +194,7 @@ def arrange(song, tpb, max_chord=None, transpose=0, instrument_override=None, do
         end = math.floor((beat + n.duration) * tpb + 0.5)
         if every and every > 0 and end - tick >= max(3, 2 * every):   # nur wirklich lange Töne
             for t in range(tick + every, end, every):
-                raw.append(NBNote(t, layer, inst, clicks, n.velocity - 1, n.track))
+                raw.append(NBNote(t, layer, inst, clicks, n.velocity - 1, n.track, True))
 
     # Doppelte entfernen + Akkordgröße begrenzen
     by_slot = defaultdict(dict)
@@ -183,5 +218,7 @@ def arrange(song, tpb, max_chord=None, transpose=0, instrument_override=None, do
         keep = notes[:max_chord[layer]]
         dropped += len(notes) - len(keep)
         out.extend(keep)
+    out, d2 = limit_polyphony(out, max_poly)
+    dropped += d2
     out.sort(key=lambda n: (n.tick, LAYERS.index(n.layer), n.inst, n.clicks))
     return out, track_cfg, dropped

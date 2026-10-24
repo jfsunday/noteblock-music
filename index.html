@@ -56,6 +56,9 @@
         <label class="inline"><input type="checkbox" name="layer" value="bass" checked> Bass</label>
         <label class="inline"><input type="checkbox" name="layer" value="melodie" checked> Melodie</label>
       </fieldset>
+      <label>Max. gleichzeitige Notenblöcke <span class="hint">weniger = weniger Leitungen = kompakter (0 = unbegrenzt)</span>
+        <input id="max-poly" type="number" value="8" min="0" max="30">
+      </label>
       <fieldset>
         <legend>Ausschnitt (Sekunden im Original)</legend>
         <label class="inline">von <input id="from-s" type="number" min="0" step="1" placeholder="0"></label>

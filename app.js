@@ -235,6 +235,7 @@ function options() {
     repeats: $("#repeats").checked, layers, override, skip, doubles,
     simple_drums: $("#simple-drums").checked, sustain, auto: false,
     start_s: parseFloat($("#from-s").value) || null, end_s: parseFloat($("#to-s").value) || null,
+    max_poly: parseInt($("#max-poly").value) || null,
   };
 }
 
