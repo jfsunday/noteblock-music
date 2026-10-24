@@ -84,7 +84,7 @@
 
     <h3>Spuren</h3>
     <table id="tracks" class="tracks">
-      <thead><tr><th></th><th>Spur</th><th class="num">Noten</th><th>Notenblock-Instrument</th><th>Verdoppeln mit <span class="hint">lauter/präsenter</span></th><th>Halten <span class="hint">neu anschlagen alle … Ticks</span></th></tr></thead>
+      <thead><tr><th></th><th>Spur</th><th>Verlauf <span class="hint">Klick = Ausschnitt ab hier, Shift+Klick = bis hier</span></th><th class="num">Noten</th><th>Notenblock-Instrument</th><th>Verdoppeln mit <span class="hint">lauter/präsenter</span></th><th>Halten <span class="hint">neu anschlagen alle … Ticks</span></th></tr></thead>
       <tbody></tbody>
     </table>
   </section>
@@ -94,8 +94,11 @@
       <div id="stats" class="stats"></div>
       <div class="actions">
         <button id="play" class="primary">▶ Hörprobe</button>
-        <div class="track grow"><div id="progress"></div></div>
-        <label class="inline" title="Wie viele Etagen übereinander gebaut werden dürfen (je 3 Blöcke hoch)">Max. Schichten <input id="max-layers" type="number" value="3" min="1" max="20"></label>
+        <div id="seek" class="track grow seek" title="Klicken zum Spulen"><div id="progress"></div></div>
+        <span id="ptime" class="muted small">0:00</span>
+        <label class="inline" title="kompakt: wiederholte Abschnitte werden nur einmal gebaut (etwa halb so viele Notenblöcke). ausgerollt: jede Note ein eigener Notenblock.">Bauweise
+          <select id="build-mode"><option value="kompakt" selected>kompakt (Wiederholungen 1× bauen)</option><option value="ausgerollt">ausgerollt (einfach)</option></select></label>
+        <label class="inline" title="Wie viele Etagen übereinander gebaut werden (mehr Etagen = kleinere Grundfläche)">Etagen <input id="max-layers" type="number" value="4" min="1" max="20"></label>
         <button id="copy-lc" class="primary">Für LiteCraft kopieren</button>
         <button id="dl-schem">.schem</button>
         <button id="dl-md">Markdown</button>

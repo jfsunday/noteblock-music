@@ -92,3 +92,8 @@ footer { padding: 20px; text-align: center; }
 }
 [hidden] { display: none !important; }
 label.inline > input[type=number] { width: 58px; }
+
+.seek { height: 12px; cursor: pointer; }
+canvas.act { width: 180px; height: 22px; background: #121317; border-radius: 4px; cursor: crosshair; display: block; }
+.solo { padding: 2px 7px; font-size: 12px; margin: 3px 4px 0 0; }
+.solo.on { background: var(--emerald); color: #000; }

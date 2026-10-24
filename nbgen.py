@@ -35,7 +35,10 @@ def main():
                     help="lange Töne alle N Ticks neu anschlagen (Tremolo statt kurzem Pling), z.B. STRINGS=2")
     ap.add_argument("--from", dest="start_s", type=float, help="Ausschnitt ab Sekunde (Original)")
     ap.add_argument("--to", dest="end_s", type=float, help="Ausschnitt bis Sekunde (Original)")
-    ap.add_argument("--schichten", type=int, default=3, help="3D-Export: max. Schichten übereinander (Standard 3)")
+    ap.add_argument("--schichten", type=int, default=4, help="3D-Export: Etagen/Schichten übereinander (Standard 4)")
+    ap.add_argument("--bauweise", choices=["kompakt", "ausgerollt"], default="kompakt",
+                    help="3D-Export: kompakt = wiederholte Abschnitte nur einmal bauen (wenig Notenblöcke), "
+                         "ausgerollt = jede Note ein eigener Notenblock")
     ap.add_argument("--export", action="store_true", help="zusätzlich 3D-Struktur als .schem + LiteCraft-JSON schreiben")
     ap.add_argument("--max-gleichzeitig", dest="max_poly", type=int, default=0,
                     help="höchstens N Notenblöcke gleichzeitig (weniger Leitungen = kompakter, ändert den Klang; 0 = aus = Standard)")
@@ -96,14 +99,16 @@ def main():
         real = render(played, wav, assets=a.sounds)
         print(f"→ {wav} (Hörprobe, {'echte Minecraft-Sounds' if real else 'Synth-Ersatzsounds'})")
     if a.export:
-        from layout import build_layout, to_litecraft_json, to_schem
-        lay = build_layout(played, max_layers=a.schichten)
+        from layout import to_litecraft_json, to_schem
+        from pipeline import build_3d
+        lay = build_3d(r, a.bauweise, a.schichten)
         base.with_name(base.name + ".schem").write_bytes(to_schem(lay))
         base.with_name(base.name + "_litecraft.json").write_text(
             to_litecraft_json(lay, song.title, round(600 / tpb, 1)), encoding="utf-8")
         w, h, l = lay["size"]
         print(f"→ 3D: {base.name}.schem + _litecraft.json ({w}×{l} Grundfläche, {h} hoch, "
-              f"{lay['layers']} Schicht(en), {len(lay['schedule'])} Notenblöcke)")
+              f"{lay['layers']} Etage(n), {sum(1 for b in lay['blocks'].values() if 'note_block' in b)} Notenblöcke, "
+              f"{len(lay['blocks'])} Blöcke, Bauweise {a.bauweise})")
     if a.save_midi and song.source == "audio":
         save_midi(song, base.with_name(base.name + "_erkannt.mid"))
 

@@ -85,13 +85,19 @@ def _describe():
     cands = tempo_candidates(song)
     _, track_cfg, _ = arrange(song, cands[0]["tpb"])
     tracks = {}
+    sec = 60 / song.bpm
+    length_s = max((n.beat + n.duration) * sec for n in song.notes) if song.notes else 0
     for n in song.notes:
-        t = tracks.setdefault(n.track, {"name": n.track, "notes": 0, "drum": n.drum, "inst": None})
+        t = tracks.setdefault(n.track, {"name": n.track, "notes": 0, "drum": n.drum, "inst": None,
+                                        "orig": [], "activity": [0] * (int(length_s) + 1)})
         t["notes"] += 1
+        t["orig"].append([round(n.beat * sec, 3), n.pitch, round(n.duration * sec, 3)])
+        t["activity"][int(n.beat * sec)] += 1
     for (track, _), (inst, _) in track_cfg.items():
         tracks[track]["inst"] = inst
     return json.dumps({
         "title": song.title, "bpm": song.bpm, "source": song.source, "notes": len(song.notes),
+        "length_s": length_s,
         "tempos": sorted(cands, key=lambda c: c["tpb"]), "recommended": cands[0]["tpb"],
         "tracks": list(tracks.values()),
         "auto": {k: v for k, v in auto_config(song).items()},
@@ -118,19 +124,35 @@ def web_generate(opts_json):
         "stats": {"noteblocks": nb, "repeaters": reps, "patterns": len(r["plan"].patterns),
                   "clocks": len(r["plan"].clocks), "taps": len(r["plan"].taps),
                   "blocks": blocks.most_common()},
-        "played": [[t, INSTRUMENTS[i].low + c, i] for t, i, c, _ in r["played"]],
+        "played": [[n.tick, INSTRUMENTS[n.inst].low + n.clicks, n.inst, n.clicks, n.track.split(" (+")[0]]
+                   for n in sorted(r["placed"], key=lambda n: n.tick)],
     })
 
 
-def web_export(kind, max_layers=3):
+def build_3d(r, mode="kompakt", layers=4):
+    """3D-Struktur aus einem run()-Ergebnis.
+    kompakt: Abschnitte wiederverwenden (Kreuzschiene, ~halb so viele Notenblöcke), Etagen = layers.
+    ausgerollt: jede Note ein eigener Notenblock (einfachste Schaltung)."""
+    layers = int(layers or 1)
+    if mode == "ausgerollt":
+        from layout import build_layout
+        return build_layout(r["played"], max_layers=layers)
+    from sections import build_section_plan
+    from layout_reuse import build_layout_reuse
+    plan, _ = build_section_plan(r["placed"], r["tpb"], r["song"].beats_per_bar)
+    return build_layout_reuse(plan, floors=layers)
+
+
+def web_export(kind, max_layers=4, mode="kompakt"):
     """LiteCraft-JSON (Zwischenablage) oder .schem (base64) aus dem letzten Ergebnis."""
     import base64
-    from layout import build_layout, to_litecraft_json, to_schem
+    from layout import to_litecraft_json, to_schem
     r = _LAST
-    lay = build_layout(r["played"], max_layers=int(max_layers or 1))
+    lay = build_3d(r, mode, max_layers)
     if kind == "litecraft":
         text = to_litecraft_json(lay, r["song"].title, round(600 / r["tpb"], 1))
     else:
         text = base64.b64encode(to_schem(lay)).decode()
+    nbs = sum(1 for st in lay["blocks"].values() if "note_block" in st)
     return json.dumps({"data": text, "size": lay["size"], "lines": lay["lines"], "layers": lay["layers"],
-                       "noteblocks": len(lay["schedule"]), "blocks": len(lay["blocks"])})
+                       "noteblocks": nbs, "blocks": len(lay["blocks"])})

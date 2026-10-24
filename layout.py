@@ -36,7 +36,7 @@ INST_BLOCK = {
 }
 FLOOR = "minecraft:stone"
 S_BLOCK = "minecraft:smooth_stone"      # leitender Block, den der Repeater powert
-ROW = 4                                 # Bahnabstand in Z
+ROW = 3                                 # Bahnabstand in Z (Notenblöcke bei z±1 berühren nur ihren Schaltblock)
 BUS_REPEATER_EVERY = 16                 # Repeater bei z = 14, 30, 46 … (nie auf einer Bahn)
 PER_STEP = 3                            # Notenblöcke pro Schritt: links, rechts + oben auf dem Schaltblock
 LAYER_H = 4                             # Boden, Technik, Notenblock oben, Luft
@@ -198,9 +198,10 @@ def build_layout(played, max_layers=3, width=None):
     for k in range(layers):
         y = LAYER_H * k + 1
         zmax = max((first_z[i] for i in assign[k]), default=0)
+        breps = set(_bus_reps({first_z[i] for i in assign[k]}, zmax))
         for z in range(0, zmax + 1):
             put(0, y - 1, z, FLOOR)
-            if z % BUS_REPEATER_EVERY == BUS_REPEATER_EVERY - 2:
+            if z in breps:
                 put(0, y, z, _repeater(1, "north"))
             else:
                 put(0, y, z, _wire())
@@ -258,13 +259,27 @@ def build_layout(played, max_layers=3, width=None):
             "lines": len(lines), "layers": layers, "width": width, "offset": offset}
 
 
+def _bus_reps(first_rows, zmax):
+    """Repeater-Positionen der Startleitung: spätestens alle 16 Blöcke, nie auf einer Einspeise-Bahn."""
+    reps, last = [], -1
+    while last + 16 <= zmax:
+        z = last + 16
+        while z in first_rows:
+            z -= 1
+        reps.append(z)
+        last = z
+    return reps
+
+
 def _bus_times_formula(layers, assign, first_z):
     """Wie _bus_times, aber ohne Blöcke: Repeater liegen bei z ≡ 14 (mod 16)."""
     times = {}
     for k in range(layers):
         for i in assign[k]:
             z = first_z[i]
-            times[i] = k + 1 + sum(1 for zz in range(0, z + 1) if zz % BUS_REPEATER_EVERY == BUS_REPEATER_EVERY - 2)
+            rows = {first_z[j] for j in assign[k]}
+            reps = _bus_reps(rows, max(rows))
+            times[i] = k + 1 + sum(1 for zz in reps if zz < z)
     return times
 
 
@@ -369,3 +384,17 @@ def to_schem(layout, data_version=4786):
     buf = io.BytesIO()
     _nbt(10, "Schematic", root, buf)
     return gzip.compress(buf.getvalue())
+
+
+def build_layout_fit(played, footprint=50, max_height=None):
+    """Kleinstmögliche Schichtenzahl, sodass die Grundfläche höchstens footprint × footprint ist."""
+    width = max(16, footprint - 6)
+    best = None
+    for layers in range(1, 64):
+        L = build_layout(played, max_layers=layers, width=width)
+        best = L
+        if L["size"][0] <= footprint and L["size"][2] <= footprint:
+            return L
+        if L["layers"] < layers:          # mehr Schichten bringen nichts mehr
+            break
+    return best

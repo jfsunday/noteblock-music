@@ -211,10 +211,41 @@ function buildSettings() {
         `<option value="${v}" ${String(v) === String(auto.sustain[t.name] || "") ? "selected" : ""}>${v || "–"}</option>`).join("")}</select>`;
     const role = auto.roles[t.name] ? `<span class="hint">${escapeHtml(auto.roles[t.name])}</span>` : "";
     tr.innerHTML = `<td><input type="checkbox" ${auto.skip.includes(t.name) ? "" : "checked"} data-use="${escapeAttr(t.name)}"></td>
-      <td>${escapeHtml(t.name)}${role}</td><td class="num">${t.notes}</td><td>${instCell}</td><td>${dblCell}</td><td>${susCell}</td>`;
+      <td>${escapeHtml(t.name)}${role}<div><button class="solo" data-orig="${escapeAttr(t.name)}" title="Diese Spur im Original anhören">▶ Original</button><button class="solo" data-mc="${escapeAttr(t.name)}" title="Diese Spur so anhören, wie die Notenblöcke sie spielen">▶ Notenblock</button></div></td>
+      <td><canvas class="act" data-act="${escapeAttr(t.name)}" width="360" height="44"></canvas></td>
+      <td class="num">${t.notes}</td><td>${instCell}</td><td>${dblCell}</td><td>${susCell}</td>`;
     tb.append(tr);
   }
+  drawActivity();
 }
+
+// ---------------- Verlauf je Spur (Ausschnitt per Klick wählen) ----------------
+function drawActivity() {
+  const L = current.length_s || 1;
+  const from = parseFloat($("#from-s").value) || 0, to = parseFloat($("#to-s").value) || L;
+  document.querySelectorAll("canvas.act").forEach((cv) => {
+    const t = current.tracks.find((x) => x.name === cv.dataset.act);
+    const g = cv.getContext("2d"), W = cv.width, H = cv.height;
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = "rgba(63,207,122,.12)";
+    g.fillRect((from / L) * W, 0, ((to - from) / L) * W, H);
+    const max = Math.max(1, ...t.activity);
+    g.fillStyle = t.drum ? "#f2c14e" : "#3fcf7a";
+    t.activity.forEach((v, i) => { if (v) { const h = Math.max(2, (v / max) * (H - 4)); g.fillRect((i / L) * W, H - h, Math.max(1, W / L), h); } });
+    if (playing && playing.track === t.name) {
+      g.fillStyle = "#e5483b"; g.fillRect(((playing.pos || 0) / L) * W, 0, 2, H);
+    }
+  });
+}
+document.addEventListener("click", (e) => {
+  const cv = e.target.closest && e.target.closest("canvas.act");
+  if (!cv) return;
+  const r = cv.getBoundingClientRect();
+  const sec = Math.round(((e.clientX - r.left) / r.width) * (current.length_s || 0));
+  $(e.shiftKey ? "#to-s" : "#from-s").value = sec;
+  drawActivity();
+  $("#from-s").dispatchEvent(new Event("change", { bubbles: true }));
+});
 
 const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const escapeAttr = escapeHtml;
@@ -249,6 +280,7 @@ $("#settings").addEventListener("change", async (e) => {
     restore(keep);
   }
   if (e.target.id === "audio-sens") { status("Bitte Datei neu laden, um die Empfindlichkeit anzuwenden."); return; }
+  if (e.target.id === "from-s" || e.target.id === "to-s") drawActivity();
   clearTimeout(genTimer);
   genTimer = setTimeout(generate, 150);
 });
@@ -317,30 +349,39 @@ function download(name, text, type) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 $("#copy-lc").onclick = async () => {
-  const r = await py("export", { kind: "litecraft", layers: +$("#max-layers").value || 1 });
+  const r = await py("export", { kind: "litecraft", layers: +$("#max-layers").value || 1, mode: $("#build-mode").value });
   try {
     await navigator.clipboard.writeText(r.data);
-    $("#export-info").textContent = `In die Zwischenablage kopiert: ${r.blocks} Blöcke, ${r.noteblocks} Notenblöcke, ${r.lines} Leitungen, ${r.layers} Schicht(en), Größe ${r.size[0]}×${r.size[2]} Grundfläche, ${r.size[1]} hoch. In LiteCraft einfügen (Strg+V) und den Knopf am Start drücken.`;
+    $("#export-info").textContent = `In die Zwischenablage kopiert: ${r.blocks} Blöcke, ${r.noteblocks} Notenblöcke, ${r.lines} Leitungen/Muster, ${r.layers} Etage(n), Größe ${r.size[0]}×${r.size[2]} Grundfläche, ${r.size[1]} hoch. In LiteCraft einfügen (Strg+V) und den Knopf am Start drücken.`;
   } catch {
     download(current.title + "_litecraft.json", r.data, "application/json");
     $("#export-info").textContent = "Zwischenablage nicht erlaubt – als Datei heruntergeladen.";
   }
 };
 $("#dl-schem").onclick = async () => {
-  const r = await py("export", { kind: "schem", layers: +$("#max-layers").value || 1 });
+  const r = await py("export", { kind: "schem", layers: +$("#max-layers").value || 1, mode: $("#build-mode").value });
   const bin = Uint8Array.from(atob(r.data), (c) => c.charCodeAt(0));
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([bin], { type: "application/octet-stream" }));
   a.download = current.title + ".schem";
   a.click();
-  $("#export-info").textContent = `.schem: ${r.blocks} Blöcke, ${r.noteblocks} Notenblöcke, ${r.layers} Schicht(en), ${r.size[0]}×${r.size[2]} Grundfläche, ${r.size[1]} hoch (Litematica/WorldEdit/LiteCraft).`;
+  $("#export-info").textContent = `.schem: ${r.blocks} Blöcke, ${r.noteblocks} Notenblöcke, ${r.layers} Etage(n), ${r.size[0]}×${r.size[2]} Grundfläche, ${r.size[1]} hoch (Litematica/WorldEdit/LiteCraft).`;
 };
 $("#dl-md").onclick = () => download(current.title + "_bauplan.md", lastResult.markdown, "text/markdown");
 $("#dl-json").onclick = () => download(current.title + "_bauplan.json", lastResult.json, "application/json");
 $("#print").onclick = () => { document.querySelectorAll("#plan details").forEach((d) => (d.open = true)); window.print(); };
 
-// ---------------- Hörprobe (Notenblock-Synth) ----------------
+// ---------------- Hörprobe (echte Minecraft-Sounds, Synth als Ersatz) ----------------
 let actx = null, playing = null;
+const SND = {};
+let sndLoading = null;
+const MC_SOUNDS = ["harp", "bass", "basedrum", "snare", "hat", "bell", "flute", "chime", "guitar", "xylophone",
+  "iron_xylophone", "cow_bell", "didgeridoo", "bit", "banjo", "pling"];
+function loadSounds() {
+  return sndLoading || (sndLoading = Promise.all(MC_SOUNDS.map(async (n) => {
+    try { SND[n] = await actx.decodeAudioData(await (await fetch(`mc-${n}.ogg`)).arrayBuffer()); } catch { /* Synth-Ersatz */ }
+  })));
+}
 function tone(inst, freq, sr) {
   const n = Math.floor(sr * 0.6), out = new Float32Array(n);
   for (let i = 0; i < n; i++) {
@@ -361,40 +402,97 @@ function tone(inst, freq, sr) {
   }
   return out;
 }
-
-function stopPlayback() {
-  if (playing) { playing.src.stop(); cancelAnimationFrame(playing.raf); playing = null; }
-  $("#play").textContent = "▶ Hörprobe";
-  $("#progress").style.width = "0";
+// events: {t (s), inst, clicks} (Notenblock) oder {t, inst, midi, dur} (Original)
+async function renderEvents(events) {
+  actx = actx || new AudioContext();
+  await loadSounds();
+  const sr = 44100, end = Math.max(0, ...events.map((e) => e.t)) + 1.5;
+  const off = new OfflineAudioContext(1, Math.ceil(end * sr), sr);
+  const comp = off.createDynamicsCompressor();
+  const master = off.createGain();
+  master.gain.value = 0.5;
+  master.connect(comp); comp.connect(off.destination);
+  const cache = {};
+  for (const e of events) {
+    let buf, rate = 1;
+    if (e.clicks != null && SND[e.inst]) { buf = SND[e.inst]; rate = 2 ** ((e.clicks - 12) / 12); }
+    else {
+      const midi = e.midi != null ? e.midi : 54 + e.clicks, key = e.inst + midi;
+      if (!cache[key]) {
+        const data = tone(e.inst, 440 * 2 ** ((midi - 69) / 12), sr);
+        cache[key] = off.createBuffer(1, data.length, sr);
+        cache[key].copyToChannel(data, 0);
+      }
+      buf = cache[key];
+    }
+    const src = off.createBufferSource();
+    src.buffer = buf; src.playbackRate.value = rate; src.connect(master); src.start(e.t);
+  }
+  return off.startRendering();
+}
+const DRUM_MAP = (p) => (p === 35 || p === 36 ? "basedrum" : p === 38 || p === 40 || p === 39 ? "snare" : "hat");
+function trackEvents(name, mode) {
+  if (mode === "orig") {
+    const t = current.tracks.find((x) => x.name === name);
+    return t.orig.map(([s, p]) => (t.drum ? { t: s, inst: DRUM_MAP(p), clicks: 12 } : { t: s, inst: "harp", midi: p }));
+  }
+  return (lastResult ? lastResult.played : []).filter((n) => name == null || n[4] === name)
+    .map(([tick, , inst, clicks]) => ({ t: tick * 0.1, inst, clicks }));
 }
 
-$("#play").onclick = () => {
-  if (playing) return stopPlayback();
-  actx = actx || new AudioContext();
-  const sr = actx.sampleRate, notes = lastResult.played;
-  const end = Math.max(...notes.map((n) => n[0])) * 0.1 + 1;
-  const buf = actx.createBuffer(1, Math.ceil(end * sr), sr), data = buf.getChannelData(0);
-  const cache = {};
-  for (const [tick, midi, inst] of notes) {
-    const key = inst + midi;
-    const s = cache[key] || (cache[key] = tone(inst, 440 * 2 ** ((midi - 69) / 12), sr));
-    const a = Math.floor(tick * 0.1 * sr);
-    for (let i = 0; i < s.length && a + i < data.length; i++) data[a + i] += s[i] * 0.22;
-  }
-  let peak = 0;
-  for (let i = 0; i < data.length; i++) peak = Math.max(peak, Math.abs(data[i]));
-  if (peak > 1) for (let i = 0; i < data.length; i++) data[i] /= peak;
+function stopPlayback() {
+  if (playing) { try { playing.src.stop(); } catch {} cancelAnimationFrame(playing.raf); }
+  const was = playing; playing = null;
+  $("#play").textContent = "▶ Hörprobe";
+  document.querySelectorAll(".solo.on").forEach((b) => b.classList.remove("on"));
+  $("#progress").style.width = "0";
+  if (was && was.track && current) drawActivity();
+}
+function startBuffer(buf, offset, meta) {
+  stopPlayback();
   const src = actx.createBufferSource();
-  src.buffer = buf;
-  src.connect(actx.destination);
-  src.start();
-  const t0 = actx.currentTime;
+  src.buffer = buf; src.connect(actx.destination);
+  src.start(0, offset);
+  const t0 = actx.currentTime - offset;
+  playing = { src, raf: 0, buf, ...meta };
+  src.onended = () => { if (playing && playing.src === src) stopPlayback(); };
+  if (meta.button) meta.button.classList.add("on");
+  if (!meta.track) $("#play").textContent = "■ Stopp";
   const tick = () => {
-    $("#progress").style.width = Math.min(100, ((actx.currentTime - t0) / end) * 100) + "%";
+    if (!playing || playing.src !== src) return;
+    const pos = actx.currentTime - t0;
+    playing.pos = pos;
+    $("#progress").style.width = Math.min(100, (pos / buf.duration) * 100) + "%";
+    $("#ptime").textContent = `${Math.floor(pos / 60)}:${String(Math.floor(pos % 60)).padStart(2, "0")}`;
+    if (meta.track) drawActivity();
     playing.raf = requestAnimationFrame(tick);
   };
-  playing = { src, raf: 0 };
-  src.onended = stopPlayback;
-  $("#play").textContent = "■ Stopp";
   tick();
+}
+let fullBuf = null, fullFor = null;
+$("#play").onclick = async () => {
+  if (playing && !playing.track) return stopPlayback();
+  status("Hörprobe wird berechnet …", 0.5);
+  if (fullFor !== lastResult) { fullBuf = await renderEvents(trackEvents(null, "mc")); fullFor = lastResult; }
+  status("");
+  startBuffer(fullBuf, 0, {});
 };
+$("#seek").onclick = (e) => {
+  if (!playing) return;
+  const r = $("#seek").getBoundingClientRect();
+  startBuffer(playing.buf, ((e.clientX - r.left) / r.width) * playing.buf.duration,
+    { track: playing.track, button: playing.button });
+};
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest && e.target.closest("button.solo");
+  if (!b) return;
+  e.preventDefault();
+  const name = b.dataset.orig || b.dataset.mc, mode = b.dataset.orig ? "orig" : "mc";
+  if (playing && playing.button === b) return stopPlayback();
+  const ev = trackEvents(name, mode);
+  if (!ev.length) { status("Diese Spur hat (mit den aktuellen Einstellungen) keine Notenblöcke.", null, true); return; }
+  status("Spur wird berechnet …", 0.5);
+  const buf = await renderEvents(ev);
+  status("");
+  startBuffer(buf, 0, { track: name, button: b });
+});
