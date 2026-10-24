@@ -108,10 +108,15 @@ def _line_cost(key):
     return len(key) + reps
 
 
+# Kostenmodell für die Muster-Wahl. Text-Bauplan: Abgriff billig. 3D: jede Leitung ~40 Blöcke.
+COSTS = {"tap": 3, "clock": 14, "type": 8, "clocks": True}
+COSTS_3D = {"tap": 12, "clock": 10 ** 6, "type": 7, "clocks": False}
+
+
 def _layer_options(notes, bar_ticks, tpb, end, beats_per_bar=4):
     opts = []
     if float(tpb).is_integer():
-        for beats in (2, 3, 4, 6, 8, 10, 12, 16, 20, 24, 32):
+        for beats in (2, 3, 4, 6, 8, 10, 12, 16, 20, 24, 32, 48, 64):
             length = beats * tpb
             if length > end:
                 break
@@ -136,20 +141,21 @@ def _layer_options(notes, bar_ticks, tpb, end, beats_per_bar=4):
                 j += 1
             run = j - i + 1
             types[key] = True
-            if run >= MIN_CLOCK_RUNS and length >= MIN_CLOCK_PERIOD and float(length).is_integer():
+            if (COSTS["clocks"] and run >= MIN_CLOCK_RUNS and length >= MIN_CLOCK_PERIOD
+                    and float(length).is_integer()):
                 events.append(("clock", k, run, key))
             else:
                 events.extend(("play", ks[x], key) for x in range(i, j + 1))
             i = j + 1
         cost = sum(_line_cost(key) for key in types)
-        cost += 8 * len(types)
-        cost += sum(3 if e[0] == "play" else 14 for e in events)
+        cost += COSTS["type"] * len(types)
+        cost += sum(COSTS["tap"] if e[0] == "play" else COSTS["clock"] for e in events)
         cand = (cost, length, start, bars, events, types)
         if best is None or cand[0] < best[0]:
             best = cand
     # Alternative: ganzer Layer als eine einzige Leitung
     whole_key = tuple(sorted((n.tick, n.inst, n.clicks) for n in notes))
-    whole_cost = _line_cost(whole_key) + 8 + 3
+    whole_cost = _line_cost(whole_key) + COSTS["type"] + COSTS["tap"]
     if best is None or whole_cost <= best[0]:
         return (whole_cost, end + 1, 0, None, [("play", 0, whole_key)], {whole_key: True})
     return best
@@ -159,7 +165,14 @@ def _short(inst):
     return INSTRUMENTS[inst].name.split("/")[0].split(" ")[0]
 
 
-def build_plan(nbnotes, tpb, beats_per_bar, allow_repeats=True):
+def build_plan(nbnotes, tpb, beats_per_bar, allow_repeats=True, costs=None):
+    global COSTS
+    if costs is not None:
+        saved, COSTS = COSTS, costs
+        try:
+            return build_plan(nbnotes, tpb, beats_per_bar, allow_repeats)
+        finally:
+            COSTS = saved
     bar_ticks = max(1, round(beats_per_bar * tpb))
     first = min(n.tick for n in nbnotes)
     lead = (first // bar_ticks) * bar_ticks if float(tpb).is_integer() else 0
